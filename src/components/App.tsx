@@ -1,7 +1,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
   Boxes, Building2, CalendarDays, ChartNoAxesCombined, Check, ChevronLeft, ChevronRight,
-  ClipboardList, CloudSun, Download, History, LayoutDashboard, MapPin, PackageOpen,
+  BrainCircuit, ClipboardList, CloudSun, Download, History, LayoutDashboard, MapPin, PackageOpen,
   RotateCcw, Settings2, Snowflake, Sun, Truck, X,
 } from 'lucide-react';
 import { initialState, locations, products } from '../lib/data';
@@ -15,6 +15,7 @@ import { api, apiBase, type SessionUser } from '../lib/api';
 
 const pages = [
   ['dashboard', 'Dashboard', LayoutDashboard], ['forecast', 'Sales Forecast', ChartNoAxesCombined],
+  ['analytics', 'Analytics', BrainCircuit],
   ['orders', 'Suggested Orders', ClipboardList], ['inventory', 'Inventory', Boxes],
   ['suppliers', 'Suppliers', Truck], ['corporate', 'Corporate Overview', Building2],
   ['consolidation', 'Artimex Consolidation', PackageOpen], ['history', 'Order History', History],
@@ -87,6 +88,7 @@ export default function App() {
   const content = {
     dashboard: <Dashboard state={state} update={update} openReview={() => setReviewOpen(true)} />,
     forecast: <Forecast state={state} update={update} />,
+    analytics: <Analytics state={state} update={update} />,
     orders: <Orders state={state} update={update} openReview={() => setReviewOpen(true)} />,
     inventory: <Inventory state={state} update={update} />,
     suppliers: <Suppliers state={state} />,
@@ -167,6 +169,18 @@ function PlannerSheet({ state }: ScreenProps) {
   const days = period === 'today' ? 1 : 7;
   return <section className="card plannerSheet"><div className="cardHead cocoaHead"><div><h2>Sales forecast worksheet</h2><p>Built from comparable weekdays and the selected weather rule.</p></div><div className="controls"><select aria-label="Planning period" value={period} onChange={(event)=>setPeriod(event.target.value as 'today'|'7days')}><option value="today">Today</option><option value="7days">Next 7 days</option></select><span className="pill amber">DEMO DATA</span></div></div><div className="tableWrap"><table><thead><tr><th>Day</th><th>Weather</th><th>Temperature</th><th>Historical average</th><th>Weather adjustment</th><th>Calculated sales</th><th className="yourForecast">Your forecast</th><th>Status</th></tr></thead><tbody>{Array.from({length:days},(_,index)=>{const date=new Date(`${state.date}T12:00:00`);date.setDate(date.getDate()+index);const calculated=forecastSales(state);return <tr key={date.toISOString()}><td><b>{date.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</b></td><td className="capitalize">{state.weather}<small>Demo assumption</small></td><td>{state.weather==='hot'?'95°F':state.weather==='cold'?'52°F':'72°F'}<small>Weather unavailable</small></td><td className="numeric">{currency(historicalSales(state.locationId))}<small>4 comparable days</small></td><td className="numeric">{weatherAdjustment(state)}%</td><td className="numeric"><b>{currency(calculated)}</b></td><td className="yourForecast"><input className="forecastInput" type="number" min="0" defaultValue={calculated} aria-label={`Manager forecast ${date.toISOString().slice(0,10)}`} /></td><td><span className="pill">Draft</span></td></tr>})}</tbody></table></div><div className="cardFoot"><span>Location to configure · Forecast uses clearly identified sample data.</span><div className="controls"><button className="btn">Save draft</button><a className="btn primary" href="#orders">Validate & continue <ChevronRight /></a></div></div></section>;
 }
+
+type Insight={summary:string;alerts:string[];opportunities:string[];recommended_actions:string[];confidence_note:string};
+function Analytics({state,update}:ScreenProps){
+  const [insight,setInsight]=useState<Insight|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState('');
+  const restaurantData=locations.map(location=>({label:location.name,value:forecastSales(state,location.id)}));
+  const productData=products.map(product=>({label:product.name.split(' · ')[0],value:plannedQuantity(state,product)}));
+  const supplierData=[...new Set(products.map(product=>product.supplier))].map(supplier=>({label:supplier,value:products.filter(product=>product.supplier===supplier).reduce((sum,product)=>sum+plannedQuantity(state,product),0)}));
+  const analyze=async()=>{setLoading(true);setError('');try{const response=await api<{insight:Insight}>('/api/analytics/insights',{method:'POST',body:JSON.stringify({period:{from:state.date,to:state.date},metrics:{restaurants:restaurantData,products:productData,suppliers:supplierData,weather:state.weather}})});setInsight(response.insight);}catch(reason){setError(reason instanceof Error?reason.message:'Analysis unavailable');}finally{setLoading(false);}};
+  return <><ScreenTitle state={state} update={update} eyebrow="OPERATIONS INTELLIGENCE" title="Performance Analytics" subtitle="Sales outlook, product needs and supplier demand in one view." controls={false}/><DemoNotice/><div className="analyticsGrid"><BarPanel title="Forecast by restaurant" subtitle="Projected sales · USD" data={restaurantData.slice(0,6)} money/><BarPanel title="Needs by product" subtitle="Planned whole cases" data={productData}/><BarPanel title="Demand by supplier" subtitle="Planned whole cases" data={supplierData}/></div><section className="card aiPanel"><div className="aiPanelHead"><div className="aiIcon"><BrainCircuit/></div><div><span className="eyebrow">HUGGING FACE ANALYSIS</span><h2>Operations briefing</h2><p>AI explains the available metrics; it never changes forecasts or orders.</p></div><button className="btn primary" onClick={analyze} disabled={loading||!apiBase}>{loading?'Analyzing…':'Generate analysis'}</button></div>{!apiBase&&<div className="aiEmpty">Connect the Railway API to enable AI analysis. Dashboard figures remain clearly identified sample data.</div>}{error&&<div className="loginError" role="alert">{error}</div>}{insight&&<div className="insightBody"><div className="insightSummary">{insight.summary}</div><InsightList title="Alerts" items={insight.alerts}/><InsightList title="Opportunities" items={insight.opportunities}/><InsightList title="Recommended actions" items={insight.recommended_actions}/><small>{insight.confidence_note}</small></div>}</section></>;
+}
+function BarPanel({title,subtitle,data,money=false}:{title:string;subtitle:string;data:{label:string;value:number}[];money?:boolean}){const max=Math.max(...data.map(item=>item.value),1);return <section className="card barPanel"><div className="cardHead"><div><h2>{title}</h2><p>{subtitle}</p></div><span className="pill">SAMPLE</span></div><div className="barList">{data.map(item=><div className="barRow" key={item.label}><span title={item.label}>{item.label}</span><i><b style={{width:`${Math.max(3,item.value/max*100)}%`}}/></i><strong>{money?currency(item.value):item.value}</strong></div>)}</div></section>}
+function InsightList({title,items}:{title:string;items:string[]}){return <div><h3>{title}</h3>{items.length?<ul>{items.map((item,index)=><li key={index}>{item}</li>)}</ul>:<p>No items identified.</p>}</div>}
 
 function Forecast({ state, update }: ScreenProps) {
   return <><ScreenTitle state={state} update={update} title="See what drives the forecast." subtitle="Test the weather assumptions before planning the next order." /><DemoNotice /><Metrics state={state} /><div className="split"><SalesChart state={state} /><WeatherCard state={state} update={update} /></div><section className="card padded"><h2>A transparent forecast</h2><div className="formula">{currency(historicalSales(state.locationId))} historical average × {(1 + weatherAdjustment(state) / 100).toFixed(2)} weather factor × {(1 + state.trendAdjustment / 100).toFixed(2)} trend factor = <b>{currency(forecastSales(state))} projected sales</b><br />Product consumption uses the same demand factor, rounded up to whole cases.</div><p className="sub">Illustrative baseline from four matching weekdays. Confidence is not scored until real sales history is validated.</p></section></>;

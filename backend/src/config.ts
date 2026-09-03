@@ -8,6 +8,9 @@ const schema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().positive().default(12),
   OPEN_METEO_BASE_URL: z.string().url().default('https://customer-api.open-meteo.com/v1'),
   OPEN_METEO_API_KEY: z.string().optional(),
+  HF_TOKEN: z.string().optional(),
+  HF_MODEL: z.string().default('Qwen/Qwen3-32B'),
+  HF_API_URL: z.string().url().default('https://router.huggingface.co/v1/chat/completions'),
   PORT: z.coerce.number().positive().default(3000),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
