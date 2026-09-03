@@ -10,7 +10,7 @@ import { workflow } from './workflow.js';
 
 const app=express();
 app.set('trust proxy',1); app.use(helmet()); app.use(cors({origin:config.FRONTEND_URL,credentials:true})); app.use(express.json({limit:'1mb'}));
-app.use((req,res,next)=>{if(!['GET','HEAD','OPTIONS'].includes(req.method)&&req.headers.origin!==config.FRONTEND_URL)return res.status(403).json({error:'Invalid request origin'});next();});
+app.use((req,res,next)=>{if(!['GET','HEAD','OPTIONS'].includes(req.method)&&req.headers.origin && req.headers.origin!==config.FRONTEND_URL)return res.status(403).json({error:'Invalid request origin'});next();});
 app.use((req,_res,next)=>{ const raw=req.headers.cookie||''; req.cookies=Object.fromEntries(raw.split(';').filter(Boolean).map(v=>v.trim().split(/=(.*)/s).slice(0,2).map(decodeURIComponent))); next(); });
 const cookie={httpOnly:true,secure:config.NODE_ENV==='production',sameSite:config.NODE_ENV==='production'?'none' as const:'lax' as const,maxAge:config.SESSION_TTL_HOURS*3600000,path:'/'};
 const attempts=new Map<string,{count:number;until:number}>();
