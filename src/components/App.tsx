@@ -100,7 +100,7 @@ export default function App() {
   if(apiBase&&!session)return <Login onLogin={setSession}/>;
   return <div className="shell">
     <aside className="sidebar">
-      <a className="brand" href="#dashboard"><span className="brandmark">G</span><span>EL GALLO GIRO<small>OPERATIONS PLANNER</small></span></a>
+      <a className="brand" href="#dashboard"><img src="/brand/el-gallo-giro-logo.png" alt="El Gallo Giro" /><span>OPERATIONS PLANNER</span></a>
       <div className="navlabel">WORKSPACE</div>
       <nav>{pages.map(([id, label, Icon]) => <a key={id} href={`#${id}`} className={route === id ? 'active' : ''} aria-current={route === id ? 'page' : undefined}><Icon />{label}</a>)}</nav>
       <div className="sidebarBottom"><p><i className="live" /> Independent demo workspace</p><span>From forecast to the next delivery.</span><div className="profile"><b>CM</b><span>Charles / Manager<small>Demo mode · no real permissions</small></span></div></div>
@@ -119,7 +119,7 @@ export default function App() {
 function Login({onLogin}:{onLogin:(user:SessionUser)=>void}){
   const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
   const submit=async(event:{preventDefault:()=>void})=>{event.preventDefault();setBusy(true);setError('');try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});onLogin((await api<{user:SessionUser}>('/api/auth/me')).user);}catch(reason){setError(reason instanceof Error?reason.message:'Unable to sign in');}finally{setBusy(false);}};
-  return <div className="authPage"><form className="loginCard" onSubmit={submit}><div className="brand loginBrand"><span className="brandmark">G</span><span>EL GALLO GIRO<small>OPERATIONS PLANNER</small></span></div><div className="eyebrow">SECURE DEMO</div><h1>Welcome back.</h1><p className="sub">Sign in with your assigned manager or corporate account.</p>{error&&<div className="loginError" role="alert">{error}</div>}<label>Email<input type="email" autoComplete="username" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Password<input type="password" autoComplete="current-password" minLength={8} required value={password} onChange={e=>setPassword(e.target.value)}/></label><button className="btn primary" disabled={busy}>{busy?'Signing in…':'Sign in'}</button><p className="tiny">No public registration. Contact a corporate administrator for access.</p></form></div>;
+  return <div className="authPage"><form className="loginCard" onSubmit={submit}><div className="brand loginBrand"><img src="/brand/el-gallo-giro-logo.png" alt="El Gallo Giro" /><span>OPERATIONS PLANNER</span></div><div className="eyebrow">SECURE DEMO</div><h1>Welcome back.</h1><p className="sub">Sign in with your assigned manager or corporate account.</p>{error&&<div className="loginError" role="alert">{error}</div>}<label>Email<input type="email" autoComplete="username" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Password<input type="password" autoComplete="current-password" minLength={8} required value={password} onChange={e=>setPassword(e.target.value)}/></label><button className="btn primary" disabled={busy}>{busy?'Signing in…':'Sign in'}</button><p className="tiny">No public registration. Contact a corporate administrator for access.</p></form></div>;
 }
 
 type ScreenProps = { state: PlannerState; update: (patch: Partial<PlannerState>) => void };

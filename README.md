@@ -56,6 +56,7 @@ Une nouvelle confirmation pour le même restaurant et la même date remplace la 
 - `src/lib/storage.ts` : persistance locale dans le navigateur.
 - `src/lib/api.ts` : client HTTPS vers l’API Railway.
 - `src/styles/global.css` : design global et adaptation mobile.
+- `public/brand/el-gallo-giro-logo.png` : logo de marque provenant du site officiel gallogiro.com.
 - `src/lib/calculations.test.ts` : tests des règles métier principales.
 - `backend/src` : API, authentification serveur, météo et permissions.
 - `backend/migrations` : schéma PostgreSQL versionné.
