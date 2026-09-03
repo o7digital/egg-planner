@@ -1,0 +1,32 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+DO $$ BEGIN CREATE TYPE user_role AS ENUM ('manager','admin','super_admin'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN CREATE TYPE workflow_status AS ENUM ('draft','submitted','approved','returned'); EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS restaurants (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), slug text UNIQUE NOT NULL, name text NOT NULL,
+  address text, latitude numeric(9,6), longitude numeric(9,6), timezone text NOT NULL DEFAULT 'America/Los_Angeles',
+  delivery_calendar jsonb NOT NULL DEFAULT '{}'::jsonb, active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(),
+  CHECK ((latitude IS NULL AND longitude IS NULL) OR (latitude IS NOT NULL AND longitude IS NOT NULL))
+);
+CREATE TABLE IF NOT EXISTS users (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email text UNIQUE NOT NULL CHECK (email = lower(email)), name text NOT NULL,
+  password_hash text NOT NULL, role user_role NOT NULL, active boolean NOT NULL DEFAULT true,
+  created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS user_restaurants (user_id uuid REFERENCES users ON DELETE CASCADE, restaurant_id uuid REFERENCES restaurants ON DELETE CASCADE, PRIMARY KEY(user_id,restaurant_id));
+CREATE TABLE IF NOT EXISTS sessions (id_hash text PRIMARY KEY, user_id uuid NOT NULL REFERENCES users ON DELETE CASCADE, expires_at timestamptz NOT NULL, created_at timestamptz NOT NULL DEFAULT now());
+CREATE TABLE IF NOT EXISTS suppliers (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), name text UNIQUE NOT NULL, active boolean NOT NULL DEFAULT true);
+CREATE TABLE IF NOT EXISTS products (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), sku text UNIQUE NOT NULL, name text NOT NULL, supplier_id uuid REFERENCES suppliers, base_unit text NOT NULL, units_per_case numeric NOT NULL CHECK(units_per_case>0), order_multiple numeric NOT NULL DEFAULT 1 CHECK(order_multiple>0), minimum_order numeric NOT NULL DEFAULT 0, active boolean NOT NULL DEFAULT true);
+CREATE TABLE IF NOT EXISTS daily_sales (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), restaurant_id uuid NOT NULL REFERENCES restaurants, sales_date date NOT NULL, amount numeric(12,2) NOT NULL CHECK(amount>=0), source text NOT NULL DEFAULT 'manual', created_at timestamptz NOT NULL DEFAULT now(), UNIQUE(restaurant_id,sales_date));
+CREATE TABLE IF NOT EXISTS weather_snapshots (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), restaurant_id uuid NOT NULL REFERENCES restaurants, forecast_date date NOT NULL, max_temp_f numeric, weather_code integer, source text NOT NULL, fetched_at timestamptz NOT NULL, raw jsonb NOT NULL DEFAULT '{}'::jsonb);
+CREATE INDEX IF NOT EXISTS weather_lookup ON weather_snapshots(restaurant_id,forecast_date,fetched_at DESC);
+CREATE TABLE IF NOT EXISTS planning_rules (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), restaurant_id uuid REFERENCES restaurants, version integer NOT NULL, hot_threshold_f numeric NOT NULL DEFAULT 85, cold_threshold_f numeric NOT NULL DEFAULT 60, hot_adjustment numeric NOT NULL DEFAULT -30, cold_adjustment numeric NOT NULL DEFAULT 40, mild_adjustment numeric NOT NULL DEFAULT 0, temperature_measure text NOT NULL DEFAULT 'daily_max', active boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL DEFAULT now(), UNIQUE(restaurant_id,version));
+CREATE TABLE IF NOT EXISTS forecasts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), restaurant_id uuid NOT NULL REFERENCES restaurants, forecast_date date NOT NULL, historical_average numeric, calculated_sales numeric, manager_forecast numeric NOT NULL CHECK(manager_forecast>=0), manager_comment text, status workflow_status NOT NULL DEFAULT 'draft', calculation_snapshot jsonb NOT NULL, weather_snapshot_id uuid REFERENCES weather_snapshots, rule_id uuid REFERENCES planning_rules, created_by uuid NOT NULL REFERENCES users, validated_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now(), UNIQUE(restaurant_id,forecast_date));
+CREATE TABLE IF NOT EXISTS consumption_ratios (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), restaurant_id uuid NOT NULL REFERENCES restaurants, product_id uuid NOT NULL REFERENCES products, units_per_1000_sales numeric NOT NULL CHECK(units_per_1000_sales>=0), version integer NOT NULL, active boolean NOT NULL DEFAULT true, created_at timestamptz NOT NULL DEFAULT now(), UNIQUE(restaurant_id,product_id,version));
+CREATE TABLE IF NOT EXISTS inventory_levels (restaurant_id uuid REFERENCES restaurants, product_id uuid REFERENCES products, usable_quantity numeric NOT NULL CHECK(usable_quantity>=0), counted_at timestamptz NOT NULL DEFAULT now(), counted_by uuid REFERENCES users, PRIMARY KEY(restaurant_id,product_id));
+CREATE TABLE IF NOT EXISTS expected_receipts (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), restaurant_id uuid REFERENCES restaurants, product_id uuid REFERENCES products, quantity numeric NOT NULL CHECK(quantity>=0), expected_at timestamptz NOT NULL, status text NOT NULL DEFAULT 'confirmed');
+CREATE TABLE IF NOT EXISTS orders (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), restaurant_id uuid NOT NULL REFERENCES restaurants, supplier_id uuid NOT NULL REFERENCES suppliers, order_date date NOT NULL, delivery_date date NOT NULL, status workflow_status NOT NULL DEFAULT 'draft', submitted_by uuid REFERENCES users, reviewed_by uuid REFERENCES users, review_comment text, snapshot jsonb NOT NULL DEFAULT '{}'::jsonb, submitted_at timestamptz, reviewed_at timestamptz, created_at timestamptz NOT NULL DEFAULT now(), updated_at timestamptz NOT NULL DEFAULT now());
+CREATE UNIQUE INDEX IF NOT EXISTS one_active_order ON orders(restaurant_id,supplier_id,delivery_date) WHERE status IN ('draft','submitted','approved');
+CREATE TABLE IF NOT EXISTS order_items (id uuid PRIMARY KEY DEFAULT gen_random_uuid(), order_id uuid REFERENCES orders ON DELETE CASCADE, product_id uuid REFERENCES products, original_suggestion numeric NOT NULL, retained_quantity numeric NOT NULL, justification text, unit text NOT NULL, calculation_snapshot jsonb NOT NULL, UNIQUE(order_id,product_id));
+CREATE TABLE IF NOT EXISTS audit_logs (id bigserial PRIMARY KEY, actor_id uuid REFERENCES users, action text NOT NULL, target_type text NOT NULL, target_id text, metadata jsonb NOT NULL DEFAULT '{}'::jsonb, created_at timestamptz NOT NULL DEFAULT now());

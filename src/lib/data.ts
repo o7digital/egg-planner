@@ -3,12 +3,14 @@ import type { PlannerState, Product } from './types';
 export const locations = [
   { id: 'canoga-park', name: 'Canoga Park', confirmed: false },
   { id: 'panorama-city', name: 'Panorama City', confirmed: false },
+  { id: 'downtown-la', name: 'Downtown L.A.', confirmed: false },
+  { id: 'huntington-park', name: 'Huntington Park', confirmed: false },
+  { id: 'lynwood', name: 'Lynwood', confirmed: false },
+  { id: 'east-los-angeles', name: 'East Los Angeles', confirmed: false },
   { id: 'santa-ana', name: 'Santa Ana', confirmed: false },
-  ...Array.from({ length: 7 }, (_, index) => ({
-    id: `demo-${index + 4}`,
-    name: `Demo location ${String(index + 4).padStart(2, '0')}`,
-    confirmed: false,
-  })),
+  { id: 'fontana', name: 'Fontana', confirmed: false },
+  { id: 'van-nuys', name: 'Van Nuys', confirmed: false },
+  { id: 'bellflower', name: 'Bellflower', confirmed: false },
 ];
 
 export const products: Product[] = [
@@ -26,7 +28,7 @@ export const initialState: PlannerState = {
   weather: 'mild',
   hotAdjustment: -30,
   coldAdjustment: 40,
-  trendAdjustment: 4,
+  trendAdjustment: 0,
   manualQuantities: {},
   stocks: {},
   orders: [],

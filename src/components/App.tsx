@@ -11,6 +11,7 @@ import {
 } from '../lib/calculations';
 import { clearState, loadState, saveState } from '../lib/storage';
 import type { DemoOrder, PlannerState, Product, ViewMode } from '../lib/types';
+import { api, apiBase, type SessionUser } from '../lib/api';
 
 const pages = [
   ['dashboard', 'Dashboard', LayoutDashboard], ['forecast', 'Sales Forecast', ChartNoAxesCombined],
@@ -35,6 +36,7 @@ export default function App() {
   const [reviewOpen, setReviewOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [notice, setNotice] = useState('');
+  const [session, setSession] = useState<SessionUser|null|undefined>(undefined);
 
   useEffect(() => {
     setState(loadState());
@@ -44,6 +46,7 @@ export default function App() {
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
+  useEffect(()=>{if(!apiBase){setSession(null);return;}api<{user:SessionUser}>('/api/auth/me').then(({user})=>setSession(user)).catch(()=>setSession(null));},[]);
   useEffect(() => { if (ready) saveState(state); }, [state, ready]);
   useEffect(() => {
     if (!notice) return;
@@ -93,6 +96,8 @@ export default function App() {
     settings: <Rules state={state} update={update} requestReset={() => setResetOpen(true)} notify={setNotice} />,
   }[route];
 
+  if(apiBase&&session===undefined)return <div className="authPage"><p>Loading secure workspace…</p></div>;
+  if(apiBase&&!session)return <Login onLogin={setSession}/>;
   return <div className="shell">
     <aside className="sidebar">
       <a className="brand" href="#dashboard"><span className="brandmark">G</span><span>EL GALLO GIRO<small>OPERATIONS PLANNER</small></span></a>
@@ -101,7 +106,7 @@ export default function App() {
       <div className="sidebarBottom"><p><i className="live" /> Independent demo workspace</p><span>From forecast to the next delivery.</span><div className="profile"><b>CM</b><span>Charles / Manager<small>Demo mode · no real permissions</small></span></div></div>
     </aside>
     <div className="workspace">
-      <header><div className="crumb">Operations <span>/</span> <b>{pages.find(([id]) => id === route)?.[1]}</b></div><div className="headright"><span className="demoBadge">SAMPLE DATA</span><select aria-label="Demo view mode" value={state.viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}><option value="manager">Manager demo</option><option value="corporate">Corporate demo</option></select><span className="avatar">GG</span></div></header>
+      <header><div className="crumb">Operations <span>/</span> <b>{pages.find(([id]) => id === route)?.[1]}</b></div><div className="headright"><span className="demoBadge">{apiBase?'CONNECTED DEMO':'LOCAL DEMO'}</span>{session?<><span className="sessionUser">{session.name}<small>{session.role.replace('_',' ')}</small></span><button className="btn" onClick={async()=>{await api('/api/auth/logout',{method:'POST'});setSession(null);}}>Sign out</button></>:<select aria-label="Demo view mode" value={state.viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}><option value="manager">Manager demo</option><option value="corporate">Corporate demo</option></select>}<span className="avatar">GG</span></div></header>
       <main>{content}</main>
       <footer>Interactive demo · Fictional data · Restaurants to confirm · No live weather, POS, supplier connection or real order sending</footer>
     </div>
@@ -109,6 +114,12 @@ export default function App() {
     {resetOpen && <Modal close={() => setResetOpen(false)}><div className="eyebrow">RESET DEMO</div><h2>Reset all local data?</h2><p>This removes stock edits, manual quantities, settings and demo order history stored in this browser.</p><div className="dialogButtons"><button className="btn" onClick={() => setResetOpen(false)}>Cancel</button><button className="btn danger" onClick={reset}>Reset demo data</button></div></Modal>}
     {notice && <div className="toast" role="status">{notice}</div>}
   </div>;
+}
+
+function Login({onLogin}:{onLogin:(user:SessionUser)=>void}){
+  const [email,setEmail]=useState(''),[password,setPassword]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
+  const submit=async(event:{preventDefault:()=>void})=>{event.preventDefault();setBusy(true);setError('');try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({email,password})});onLogin((await api<{user:SessionUser}>('/api/auth/me')).user);}catch(reason){setError(reason instanceof Error?reason.message:'Unable to sign in');}finally{setBusy(false);}};
+  return <div className="authPage"><form className="loginCard" onSubmit={submit}><div className="brand loginBrand"><span className="brandmark">G</span><span>EL GALLO GIRO<small>OPERATIONS PLANNER</small></span></div><div className="eyebrow">SECURE DEMO</div><h1>Welcome back.</h1><p className="sub">Sign in with your assigned manager or corporate account.</p>{error&&<div className="loginError" role="alert">{error}</div>}<label>Email<input type="email" autoComplete="username" required value={email} onChange={e=>setEmail(e.target.value)}/></label><label>Password<input type="password" autoComplete="current-password" minLength={8} required value={password} onChange={e=>setPassword(e.target.value)}/></label><button className="btn primary" disabled={busy}>{busy?'Signing in…':'Sign in'}</button><p className="tiny">No public registration. Contact a corporate administrator for access.</p></form></div>;
 }
 
 type ScreenProps = { state: PlannerState; update: (patch: Partial<PlannerState>) => void };
@@ -139,7 +150,13 @@ function Metric({ label, value, note, primary = false }: { label: string; value:
 
 function Dashboard({ state, update, openReview }: ScreenProps & { openReview: () => void }) {
   const location = locations.find((item) => item.id === state.locationId)!;
-  return <><ScreenTitle state={state} update={update} title="A better plan for tomorrow." subtitle={`Let’s get ${location.name} ready for the next service.`} /><DemoNotice /><Metrics state={state} /><div className="split"><SalesChart state={state} /><WeatherCard state={state} update={update} /></div><ProductTable state={state} update={update} productsToShow={products.slice(0, 3)} openReview={openReview} /><div className="bottomNote">Bakery products arrive frozen from Artimex. Suggestions cover one day plus configured safety stock. <a href="#orders">View all products →</a></div></>;
+  return <><ScreenTitle state={state} update={update} title="Daily & Weekly Planner" subtitle={`${location.name} · Operational sales forecast worksheet.`} /><DemoNotice /><PlannerSheet state={state} update={update} /><ProductTable state={state} update={update} productsToShow={products.slice(0, 3)} openReview={openReview} /><div className="bottomNote">Bakery products arrive frozen from Artimex. Suggestions cover one day plus configured safety stock. <a href="#orders">View all products →</a></div></>;
+}
+
+function PlannerSheet({ state }: ScreenProps) {
+  const [period, setPeriod] = useState<'today'|'7days'>('today');
+  const days = period === 'today' ? 1 : 7;
+  return <section className="card plannerSheet"><div className="cardHead"><div><h2>Sales forecast worksheet</h2><p>Comparable weekdays and weather assumptions must be validated with real data.</p></div><div className="controls"><select aria-label="Planning period" value={period} onChange={(event)=>setPeriod(event.target.value as 'today'|'7days')}><option value="today">Today</option><option value="7days">Next 7 days</option></select><span className="pill amber">DEMO WEATHER</span></div></div><div className="tableWrap"><table><thead><tr><th>Day</th><th>Weather</th><th>Temperature</th><th>Historical average</th><th>Weather adjustment</th><th>Calculated sales</th><th>Manager forecast</th><th>Status</th></tr></thead><tbody>{Array.from({length:days},(_,index)=>{const date=new Date(`${state.date}T12:00:00`);date.setDate(date.getDate()+index);const calculated=forecastSales(state);return <tr key={date.toISOString()}><td><b>{date.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</b></td><td>{state.weather}<small>Manual demo assumption</small></td><td>{state.weather==='hot'?'95°F':state.weather==='cold'?'52°F':'72°F'}<small>Live weather not connected</small></td><td>{currency(historicalSales(state.locationId))}<small>Sample comparable days</small></td><td>{weatherAdjustment(state)}%</td><td>{currency(calculated)}</td><td><input className="forecastInput" type="number" min="0" defaultValue={calculated} aria-label={`Manager forecast ${date.toISOString().slice(0,10)}`} /></td><td><span className="pill">Draft</span></td></tr>})}</tbody></table></div><div className="cardFoot"><span>Location not configured · Save and validation will move to the Railway API.</span><div className="controls"><button className="btn">Save draft</button><a className="btn primary" href="#forecast">Review forecast <ChevronRight /></a></div></div></section>;
 }
 
 function Forecast({ state, update }: ScreenProps) {

@@ -1,6 +1,6 @@
 # Gallo Giro Ops Planner
 
-Application de démonstration pour prévoir les ventes des restaurants Gallo Giro et suggérer des commandes fournisseurs. Le projet reprend la maquette HTML/CSS/JavaScript fournie et la transforme en application **Astro + React + TypeScript**.
+Application de planification opérationnelle pour prévoir les ventes des restaurants Gallo Giro et préparer les commandes fournisseurs. Le dépôt contient le frontend **Astro + React + TypeScript** destiné à Vercel et l’API **Node.js + TypeScript + PostgreSQL** destinée à Railway.
 
 ## Installation et lancement
 
@@ -20,6 +20,19 @@ npm test
 npm run build
 npm run preview
 ```
+
+L’API se lance séparément :
+
+```bash
+npm run backend:install
+cp backend/.env.example backend/.env
+# renseigner les valeurs locales dans backend/.env
+npm --prefix backend run migrate
+npm --prefix backend run seed
+npm run backend:dev
+```
+
+Définir `PUBLIC_API_URL=http://localhost:3000` dans `.env` pour activer la connexion sécurisée du frontend. Sans cette variable, le frontend reste volontairement en mode maquette locale, clairement marqué `LOCAL DEMO`.
 
 ## Parcours de démonstration
 
@@ -41,8 +54,11 @@ Une nouvelle confirmation pour le même restaurant et la même date remplace la 
 - `src/lib/data.ts` : restaurants, produits et état initial fictifs.
 - `src/lib/calculations.ts` : fonctions pures de prévision, stock et commande.
 - `src/lib/storage.ts` : persistance locale dans le navigateur.
+- `src/lib/api.ts` : client HTTPS vers l’API Railway.
 - `src/styles/global.css` : design global et adaptation mobile.
 - `src/lib/calculations.test.ts` : tests des règles métier principales.
+- `backend/src` : API, authentification serveur, météo et permissions.
+- `backend/migrations` : schéma PostgreSQL versionné.
 
 ## Règles de calcul
 
@@ -56,12 +72,46 @@ Une nouvelle confirmation pour le même restaurant et la même date remplace la 
 
 Stocks, réglages, quantités manuelles et confirmations sont enregistrés dans le `localStorage` du navigateur. Le bouton **Reset demo data** de **Rules & Settings** demande une confirmation avant de supprimer ces données locales.
 
-## Limites de la démonstration
+## Déploiement Vercel et Railway
 
-- Toutes les données sont fictives et les restaurants doivent être confirmés.
+### Frontend Vercel
+
+Configurer la variable :
+
+```text
+PUBLIC_API_URL=https://VOTRE-API.up.railway.app
+```
+
+Puis construire avec `npm run build`. Le navigateur ne reçoit jamais `DATABASE_URL` ni la clé météo.
+
+### Backend Railway
+
+Créer un service PostgreSQL, puis un service depuis ce dépôt avec le dossier racine `backend`. Configurer :
+
+```text
+DATABASE_URL=${{Postgres.DATABASE_URL}}
+FRONTEND_URL=https://egg-planner.vercel.app
+SESSION_COOKIE_NAME=gg_session
+SESSION_TTL_HOURS=12
+OPEN_METEO_BASE_URL=https://customer-api.open-meteo.com/v1
+OPEN_METEO_API_KEY=secret-commercial-open-meteo
+SUPER_ADMIN_EMAIL=secret
+SUPER_ADMIN_PASSWORD=secret
+SUPER_ADMIN_NAME=Olivier
+NODE_ENV=production
+```
+
+Build : `npm run build`. Démarrage : `npm start`. Exécuter `npm run migrate`, puis `npm run seed` une seule fois au premier déploiement. Le seed est idempotent et ne remplace pas le mot de passe d’un super admin existant. La route `GET /api/health` vérifie aussi PostgreSQL.
+
+La version gratuite d’Open-Meteo est réservée aux usages non commerciaux. Pour cette application commerciale, configurer un abonnement et le endpoint `customer-api`; l’attribution Open-Meteo doit rester visible à proximité des données météo.
+
+## État fonctionnel et limites
+
+- Les dix restaurants demandés sont référencés, mais leurs adresses et coordonnées ne sont pas inventées : ils restent `Location not configured` jusqu’à validation.
+- Le backend fournit le schéma persistant, les sessions, la séparation manager/corporate, la météo avec cache, l’historique des ventes, l’export Artimex approuvé et l’audit super admin.
+- Le raccordement complet des feuilles de prévision, imports CSV et mutations de commande du frontend aux modèles PostgreSQL reste à terminer après configuration réelle de Railway.
 - Les modes Manager et Corporate facilitent le parcours de démonstration ; ce ne sont pas des permissions.
-- Aucun backend, aucune authentification et aucune base de données.
-- Aucune connexion à Toast, Aloha, Global Bake, un fournisseur ou une API météo.
+- Aucune connexion à Toast, Aloha, Global Bake ou un fournisseur.
 - Aucun envoi réel de commande.
 - Le CSV exporté sert uniquement à la revue du plan. Il ne constitue pas un format d’import Global Bake validé ou compatible.
 - Les prix, historiques, stocks, conditionnements, calendriers de livraison et seuils doivent être remplacés par des données validées avant tout usage opérationnel.

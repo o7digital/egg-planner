@@ -1,0 +1,23 @@
+import { Router } from 'express';
+import { z } from 'zod';
+import { auth, canAccessRestaurant, requireRole } from './auth.js';
+import { pool, query } from './db.js';
+
+export const workflow=Router();
+workflow.use(auth);
+const access=(req:any,res:any,id:string)=>canAccessRestaurant(req.user,id)||res.status(403).json({error:'Forbidden'});
+
+workflow.post('/forecasts',async(req,res)=>{
+  const parsed=z.object({restaurantId:z.string().uuid(),date:z.iso.date(),managerForecast:z.number().nonnegative(),comment:z.string().max(2000).optional(),status:z.enum(['draft','submitted']),weatherSnapshotId:z.string().uuid().nullable(),ruleId:z.string().uuid().nullable(),calculationSnapshot:z.record(z.string(),z.unknown())}).safeParse(req.body);
+  if(!parsed.success)return res.status(400).json({error:'Invalid forecast',details:parsed.error.issues}); const d=parsed.data;
+  if(!access(req,res,d.restaurantId))return;
+  const result=await query('INSERT INTO forecasts(restaurant_id,forecast_date,manager_forecast,manager_comment,status,calculation_snapshot,weather_snapshot_id,rule_id,created_by,validated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,CASE WHEN $5=\'submitted\' THEN now() END) ON CONFLICT(restaurant_id,forecast_date) DO UPDATE SET manager_forecast=$3,manager_comment=$4,status=$5,calculation_snapshot=$6,weather_snapshot_id=$7,rule_id=$8,validated_at=CASE WHEN $5=\'submitted\' THEN now() END,updated_at=now() RETURNING *',[d.restaurantId,d.date,d.managerForecast,d.comment,d.status,d.calculationSnapshot,d.weatherSnapshotId,d.ruleId,req.user!.id]);
+  await query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,metadata) VALUES($1,$2,'forecast',$3,$4)",[req.user!.id,d.status==='submitted'?'forecast_submitted':'forecast_saved',result.rows[0].id,{restaurantId:d.restaurantId,date:d.date}]);res.json(result.rows[0]);
+});
+
+workflow.post('/orders/submit',async(req,res)=>{
+  const parsed=z.object({restaurantId:z.string().uuid(),supplierId:z.string().uuid(),orderDate:z.iso.date(),deliveryDate:z.iso.date(),items:z.array(z.object({productId:z.string().uuid(),originalSuggestion:z.number().nonnegative(),retainedQuantity:z.number().nonnegative(),justification:z.string().max(2000).optional(),unit:z.string().min(1),calculationSnapshot:z.record(z.string(),z.unknown())})).min(1),snapshot:z.record(z.string(),z.unknown())}).safeParse(req.body);
+  if(!parsed.success)return res.status(400).json({error:'Invalid order',details:parsed.error.issues});const d=parsed.data;if(!access(req,res,d.restaurantId))return;
+  const client=await pool.connect();try{await client.query('BEGIN');await client.query("UPDATE orders SET status='returned',review_comment='Replaced by a new manager submission',updated_at=now() WHERE restaurant_id=$1 AND supplier_id=$2 AND delivery_date=$3 AND status IN ('draft','submitted')",[d.restaurantId,d.supplierId,d.deliveryDate]);const order=(await client.query("INSERT INTO orders(restaurant_id,supplier_id,order_date,delivery_date,status,submitted_by,submitted_at,snapshot) VALUES($1,$2,$3,$4,'submitted',$5,now(),$6) RETURNING *",[d.restaurantId,d.supplierId,d.orderDate,d.deliveryDate,req.user!.id,d.snapshot])).rows[0];for(const item of d.items)await client.query('INSERT INTO order_items(order_id,product_id,original_suggestion,retained_quantity,justification,unit,calculation_snapshot) VALUES($1,$2,$3,$4,$5,$6,$7)',[order.id,item.productId,item.originalSuggestion,item.retainedQuantity,item.justification,item.unit,item.calculationSnapshot]);await client.query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,metadata) VALUES($1,'order_submitted','order',$2,$3)",[req.user!.id,order.id,{restaurantId:d.restaurantId,deliveryDate:d.deliveryDate}]);await client.query('COMMIT');res.status(201).json(order);}catch(error){await client.query('ROLLBACK');throw error;}finally{client.release();}
+});
+workflow.post('/orders/:id/review',requireRole('admin','super_admin'),async(req,res)=>{const parsed=z.object({decision:z.enum(['approved','returned']),comment:z.string().max(2000).optional()}).safeParse(req.body);if(!parsed.success)return res.status(400).json({error:'Invalid review'});const result=await query("UPDATE orders SET status=$1,review_comment=$2,reviewed_by=$3,reviewed_at=now(),updated_at=now() WHERE id=$4 AND status='submitted' RETURNING *",[parsed.data.decision,parsed.data.comment,req.user!.id,req.params.id]);if(!result.rowCount)return res.status(409).json({error:'Order is not awaiting review'});await query("INSERT INTO audit_logs(actor_id,action,target_type,target_id,metadata) VALUES($1,$2,'order',$3,$4)",[req.user!.id,`order_${parsed.data.decision}`,String(req.params.id),{comment:parsed.data.comment}]);res.json(result.rows[0]);});
