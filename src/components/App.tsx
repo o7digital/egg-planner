@@ -1,8 +1,8 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import {
-  Boxes, Building2, ChartNoAxesCombined, ChevronLeft, ChevronRight, ClipboardList,
-  CloudSun, Download, History, LayoutDashboard, PackageOpen, RotateCcw, Settings2,
-  Truck, X,
+  Boxes, Building2, CalendarDays, ChartNoAxesCombined, Check, ChevronLeft, ChevronRight,
+  ClipboardList, CloudSun, Download, History, LayoutDashboard, MapPin, PackageOpen,
+  RotateCcw, Settings2, Snowflake, Sun, Truck, X,
 } from 'lucide-react';
 import { initialState, locations, products } from '../lib/data';
 import {
@@ -100,13 +100,13 @@ export default function App() {
   if(apiBase&&!session)return <Login onLogin={setSession}/>;
   return <div className="shell">
     <aside className="sidebar">
-      <a className="brand" href="#dashboard"><img src="/brand/el-gallo-giro-logo.png" alt="El Gallo Giro" /><span>OPERATIONS PLANNER</span></a>
+      <div className="brandPanel"><a className="brand" href="#dashboard"><img src="/brand/el-gallo-giro-logo.png" alt="El Gallo Giro" /><span>OPERATIONS PLANNER</span></a></div>
       <div className="navlabel">WORKSPACE</div>
       <nav>{pages.map(([id, label, Icon]) => <a key={id} href={`#${id}`} className={route === id ? 'active' : ''} aria-current={route === id ? 'page' : undefined}><Icon />{label}</a>)}</nav>
       <div className="sidebarBottom"><p><i className="live" /> Independent demo workspace</p><span>From forecast to the next delivery.</span><div className="profile"><b>CM</b><span>Charles / Manager<small>Demo mode · no real permissions</small></span></div></div>
     </aside>
     <div className="workspace">
-      <header><div className="crumb">Operations <span>/</span> <b>{pages.find(([id]) => id === route)?.[1]}</b></div><div className="headright"><span className="demoBadge">{apiBase?'CONNECTED DEMO':'LOCAL DEMO'}</span>{session?<><span className="sessionUser">{session.name}<small>{session.role.replace('_',' ')}</small></span><button className="btn" onClick={async()=>{await api('/api/auth/logout',{method:'POST'});setSession(null);}}>Sign out</button></>:<select aria-label="Demo view mode" value={state.viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}><option value="manager">Manager demo</option><option value="corporate">Corporate demo</option></select>}<span className="avatar">GG</span></div></header>
+      <header><div className="topPlanning"><label><MapPin /> Restaurant<select aria-label="Restaurant" value={state.locationId} onChange={(event)=>update({locationId:event.target.value})}>{locations.map(location=><option key={location.id} value={location.id}>{location.name}</option>)}</select></label><label><CalendarDays /> Date<input type="date" value={state.date} onChange={(event)=>event.target.value&&update({date:event.target.value})}/></label><label className="periodControl">Period<select aria-label="Planning period"><option>Today</option><option>Next 7 days</option><option>Custom period</option></select></label></div><div className="headright"><span className="demoBadge">{apiBase?'CONNECTED DEMO':'SAMPLE DATA'}</span>{session?<><span className="sessionUser">{session.name}<small>{session.role.replace('_',' ')}</small></span><button className="btn compact" onClick={async()=>{await api('/api/auth/logout',{method:'POST'});setSession(null);}}>Sign out</button></>:<select aria-label="Demo view mode" value={state.viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}><option value="manager">Manager demo</option><option value="corporate">Corporate demo</option></select>}<span className="avatar">GG</span></div></header>
       <main>{content}</main>
       <footer>Interactive demo · Fictional data · Restaurants to confirm · No live weather, POS, supplier connection or real order sending</footer>
     </div>
@@ -150,13 +150,22 @@ function Metric({ label, value, note, primary = false }: { label: string; value:
 
 function Dashboard({ state, update, openReview }: ScreenProps & { openReview: () => void }) {
   const location = locations.find((item) => item.id === state.locationId)!;
-  return <><ScreenTitle state={state} update={update} title="Daily & Weekly Planner" subtitle={`${location.name} · Operational sales forecast worksheet.`} /><DemoNotice /><PlannerSheet state={state} update={update} /><ProductTable state={state} update={update} productsToShow={products.slice(0, 3)} openReview={openReview} /><div className="bottomNote">Bakery products arrive frozen from Artimex. Suggestions cover one day plus configured safety stock. <a href="#orders">View all products →</a></div></>;
+  return <><ScreenTitle state={state} update={update} title="Daily & Weekly Planner" subtitle={`${location.name} · Operational sales forecast worksheet.`} controls={false} /><WorkflowSteps current={1}/><DemoNotice /><WeatherStrip state={state} update={update}/><PlannerSheet state={state} update={update} /><SupplierOrderGroups state={state} update={update} preview openReview={openReview} /></>;
+}
+
+function WorkflowSteps({current}:{current:1|2|3}) {
+  return <div className="workflowSteps" aria-label="Planning progress"><span className={current>=1?'current':''}><i>{current>1?<Check/>:'1'}</i>Weather & sales</span><ChevronRight/><span className={current>=2?'current':''}><i>{current>2?<Check/>:'2'}</i>Stock & needs</span><ChevronRight/><span className={current>=3?'current':''}><i>3</i>Review order</span></div>;
+}
+
+function WeatherStrip({state,update}:ScreenProps) {
+  const pattern:PlannerState['weather'][]=['mild','hot','hot','mild','cold','mild','hot'];
+  return <section className="weatherStrip"><div className="stripHeading"><div><span className="eyebrow">7-DAY OUTLOOK</span><h2>Weather & sales impact</h2></div><span>Location to configure · <b>Demo weather</b></span></div><div className="weatherDays">{pattern.map((weather,index)=>{const day=new Date(`${state.date}T12:00:00`);day.setDate(day.getDate()+index);const selected=index===0;const temp=weather==='hot'?95-index:weather==='cold'?54:74+index;const adjustment=weather==='hot'?state.hotAdjustment:weather==='cold'?state.coldAdjustment:0;const Icon=weather==='hot'?Sun:weather==='cold'?Snowflake:CloudSun;return <button key={day.toISOString()} className={`${weather} ${selected?'selected':''}`} onClick={()=>update({date:day.toISOString().slice(0,10),weather})}><span>{day.toLocaleDateString('en-US',{weekday:'short'})}</span><Icon/><strong>{temp}°</strong><small>{weather==='hot'?'Hot':weather==='cold'?'Cold':'Mild'}</small><em>{adjustment>0?'+':''}{adjustment}% sales</em></button>})}</div></section>;
 }
 
 function PlannerSheet({ state }: ScreenProps) {
   const [period, setPeriod] = useState<'today'|'7days'>('today');
   const days = period === 'today' ? 1 : 7;
-  return <section className="card plannerSheet"><div className="cardHead"><div><h2>Sales forecast worksheet</h2><p>Comparable weekdays and weather assumptions must be validated with real data.</p></div><div className="controls"><select aria-label="Planning period" value={period} onChange={(event)=>setPeriod(event.target.value as 'today'|'7days')}><option value="today">Today</option><option value="7days">Next 7 days</option></select><span className="pill amber">DEMO WEATHER</span></div></div><div className="tableWrap"><table><thead><tr><th>Day</th><th>Weather</th><th>Temperature</th><th>Historical average</th><th>Weather adjustment</th><th>Calculated sales</th><th>Manager forecast</th><th>Status</th></tr></thead><tbody>{Array.from({length:days},(_,index)=>{const date=new Date(`${state.date}T12:00:00`);date.setDate(date.getDate()+index);const calculated=forecastSales(state);return <tr key={date.toISOString()}><td><b>{date.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</b></td><td>{state.weather}<small>Manual demo assumption</small></td><td>{state.weather==='hot'?'95°F':state.weather==='cold'?'52°F':'72°F'}<small>Live weather not connected</small></td><td>{currency(historicalSales(state.locationId))}<small>Sample comparable days</small></td><td>{weatherAdjustment(state)}%</td><td>{currency(calculated)}</td><td><input className="forecastInput" type="number" min="0" defaultValue={calculated} aria-label={`Manager forecast ${date.toISOString().slice(0,10)}`} /></td><td><span className="pill">Draft</span></td></tr>})}</tbody></table></div><div className="cardFoot"><span>Location not configured · Save and validation will move to the Railway API.</span><div className="controls"><button className="btn">Save draft</button><a className="btn primary" href="#forecast">Review forecast <ChevronRight /></a></div></div></section>;
+  return <section className="card plannerSheet"><div className="cardHead cocoaHead"><div><h2>Sales forecast worksheet</h2><p>Built from comparable weekdays and the selected weather rule.</p></div><div className="controls"><select aria-label="Planning period" value={period} onChange={(event)=>setPeriod(event.target.value as 'today'|'7days')}><option value="today">Today</option><option value="7days">Next 7 days</option></select><span className="pill amber">DEMO DATA</span></div></div><div className="tableWrap"><table><thead><tr><th>Day</th><th>Weather</th><th>Temperature</th><th>Historical average</th><th>Weather adjustment</th><th>Calculated sales</th><th className="yourForecast">Your forecast</th><th>Status</th></tr></thead><tbody>{Array.from({length:days},(_,index)=>{const date=new Date(`${state.date}T12:00:00`);date.setDate(date.getDate()+index);const calculated=forecastSales(state);return <tr key={date.toISOString()}><td><b>{date.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}</b></td><td className="capitalize">{state.weather}<small>Demo assumption</small></td><td>{state.weather==='hot'?'95°F':state.weather==='cold'?'52°F':'72°F'}<small>Weather unavailable</small></td><td className="numeric">{currency(historicalSales(state.locationId))}<small>4 comparable days</small></td><td className="numeric">{weatherAdjustment(state)}%</td><td className="numeric"><b>{currency(calculated)}</b></td><td className="yourForecast"><input className="forecastInput" type="number" min="0" defaultValue={calculated} aria-label={`Manager forecast ${date.toISOString().slice(0,10)}`} /></td><td><span className="pill">Draft</span></td></tr>})}</tbody></table></div><div className="cardFoot"><span>Location to configure · Forecast uses clearly identified sample data.</span><div className="controls"><button className="btn">Save draft</button><a className="btn primary" href="#orders">Validate & continue <ChevronRight /></a></div></div></section>;
 }
 
 function Forecast({ state, update }: ScreenProps) {
@@ -164,7 +173,13 @@ function Forecast({ state, update }: ScreenProps) {
 }
 
 function Orders({ state, update, openReview }: ScreenProps & { openReview: () => void }) {
-  return <><ScreenTitle state={state} update={update} title="Ready for the next delivery." subtitle="Adjust the suggested quantities, then review your order." /><DemoNotice /><Metrics state={state} /><ProductTable state={state} update={update} productsToShow={products} openReview={openReview} /></>;
+  return <><ScreenTitle state={state} update={update} title="Stock & supplier needs" subtitle="Adjust each supplier quantity, then review your order." controls={false}/><WorkflowSteps current={2}/><DemoNotice /><SupplierOrderGroups state={state} update={update} openReview={openReview}/></>;
+}
+
+function SupplierOrderGroups({state,update,openReview,preview=false}:ScreenProps&{openReview:()=>void;preview?:boolean}) {
+  const suppliers=[...new Set(products.map(product=>product.supplier))];
+  const shown=preview?suppliers.slice(0,1):suppliers;
+  return <div className="supplierOrders">{shown.map(supplier=><section className={`supplierGroup ${supplier==='Artimex'?'artimex':''}`} key={supplier}><div className="supplierBanner"><div><span>{supplier==='Artimex'?'FROZEN BAKERY':'SUPPLIER ORDER'}</span><h2>{supplier}</h2></div><div><b>{products.filter(product=>product.supplier===supplier).length}</b> products · Delivery schedule to configure</div></div><ProductTable state={state} update={update} productsToShow={products.filter(product=>product.supplier===supplier)} openReview={openReview}/></section>)}{preview&&<a className="allSuppliers" href="#orders">Continue to all supplier needs <ChevronRight/></a>}</div>;
 }
 
 function WeatherCard({ state, update }: ScreenProps) {
