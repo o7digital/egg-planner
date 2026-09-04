@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
   ArrowDown, ArrowRight, ArrowUp, Boxes, BrainCircuit, Building2, CalendarDays,
   Check, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, CloudSun,
@@ -112,6 +112,10 @@ const spanishText: Record<string, string> = {
   'Olivia One': 'Olivia One', 'Decision assistant': 'Asistente de decisiones', 'What needs your attention': 'Qué requiere tu atención', 'Olivia One advises. You remain responsible for every validation and order.': 'Olivia One asesora. Tú sigues siendo responsable de cada validación y pedido.',
   'Cancel': 'Cancelar', 'RESET DEMO': 'RESTABLECER DEMO', 'Reset all local data?': '¿Restablecer todos los datos locales?', 'This removes manager forecasts, stock edits, order adjustments and demo history stored in this browser.': 'Esto elimina pronósticos del gerente, ajustes de inventario, pedidos e historial demo guardados en este navegador.',
   'Language': 'Idioma', 'MON': 'LUN', 'TUE': 'MAR', 'WED': 'MIÉ', 'THU': 'JUE', 'FRI': 'VIE', 'SAT': 'SÁB', 'SUN': 'DOM',
+  'OLIVIA ONE · DECISION SUPPORT': 'OLIVIA ONE · APOYO A LA DECISIÓN', 'Olivia One operational briefing': 'Informe operativo de Olivia One', 'Olivia’s recommended next move': 'Próximo paso recomendado por Olivia',
+  'Decision support from the current planning data': 'Apoyo a la decisión con los datos actuales de planificación', 'Live Hugging Face analysis · based on the current workspace inputs': 'Análisis de Hugging Face en vivo · basado en los datos actuales',
+  'Refresh AI analysis': 'Actualizar análisis de IA', 'Analyzing…': 'Analizando…', 'Watch': 'Atención', 'Opportunity': 'Oportunidad', 'Recommended action': 'Acción recomendada',
+  'Live Hugging Face analysis is unavailable; showing transparent demo reasoning.': 'El análisis en vivo de Hugging Face no está disponible; se muestra razonamiento demo transparente.',
   'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles', 'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo',
 };
 
@@ -297,7 +301,7 @@ export default function App() {
         </div>
         <div className="headright"><span className="demoBadge">{apiBase ? 'CONNECTED DEMO' : 'SAMPLE DATA'}</span><select className="languageSelect" aria-label="Language" value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">EN</option><option value="es">ES</option></select>{session ? <><span className="sessionUser">{session.name}<small>{session.role.replace('_', ' ')}</small></span><button className="btn compact" onClick={async () => { await api('/api/auth/logout', { method: 'POST' }); setSession(null); }}>Sign out</button></> : <select aria-label="Demo view mode" value={state.viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}><option value="manager">Manager demo</option><option value="corporate">Corporate demo</option></select>}<span className="avatar">GG</span></div>
       </header>
-      <main>{content[route]}<OliviaOne module={route} state={state} /></main>
+      <main>{content[route]}</main>
       <footer>Interactive demo · Fictional data · No live weather, POS, inventory sync, supplier connection or real order sending</footer>
     </div>
     {reviewOpen && <OrderReview state={state} close={() => setReviewOpen(false)} confirm={confirmOrder} />}
@@ -366,6 +370,7 @@ function Dashboard({ state, update, notify, openReview }: ScreenProps & { notify
     <WorkflowSteps state={state} />
     <PlanningSummary state={state} />
     <DemoNotice />
+    <OliviaBrief module="dashboard" state={state} compact />
     <WeatherStrip state={state} />
     <ForecastPanel state={state} update={update} notify={notify} />
     {statuses.forecast === 'validated' ? <ProductNeedsPanel state={state} update={update} notify={notify} /> : <LockedStep number={3} title="Calculate product needs" text="Validate the manager sales forecast to unlock consumption, safety stock and inventory calculations." />}
@@ -506,12 +511,12 @@ function SupplierOrderGroups({ state, update, openReview }: ScreenProps & { open
 
 function Forecast({ state, update, notify }: ScreenProps & { notify: (text: string) => void }) {
   const location = locations.find((item) => item.id === state.locationId)!;
-  return <><ScreenTitle state={state} update={update} title={`Sales Forecast — ${location.name}`} subtitle="Understand the weather rule, set manager expectations and validate before calculating product needs." controls={false} /><WorkflowSteps state={state} /><DemoNotice /><WeatherStrip state={state} /><ForecastPanel state={state} update={update} notify={notify} /></>;
+  return <><ScreenTitle state={state} update={update} title={`Sales Forecast — ${location.name}`} subtitle="Understand the weather rule, set manager expectations and validate before calculating product needs." controls={false} /><WorkflowSteps state={state} /><DemoNotice /><OliviaBrief module="forecast" state={state} compact /><WeatherStrip state={state} /><ForecastPanel state={state} update={update} notify={notify} /></>;
 }
 
 function Orders({ state, update, notify, openReview }: ScreenProps & { notify: (text: string) => void; openReview: () => void }) {
   const statuses = getStatuses(state);
-  return <><ScreenTitle state={state} update={update} title="Product Needs & Supplier Orders" subtitle="Restaurant demand only: validated sales become product needs, then manager-approved supplier quantities." controls={false} /><WorkflowSteps state={state} /><DemoNotice />{statuses.forecast === 'validated' ? <ProductNeedsPanel state={state} update={update} notify={notify} /> : <LockedStep number={3} title="Waiting for validated sales" text="Return to Sales Forecast and validate the manager forecast. No final supplier quantities have been created." />}{statuses.needs === 'calculated' && statuses.forecast === 'validated' ? <SupplierOrderGroups state={state} update={update} openReview={openReview} /> : <LockedStep number={4} title="Supplier orders are not prepared" text="Calculate product needs first. Suggestions remain hidden until the required validation is complete." />}</>;
+  return <><ScreenTitle state={state} update={update} title="Product Needs & Supplier Orders" subtitle="Restaurant demand only: validated sales become product needs, then manager-approved supplier quantities." controls={false} /><WorkflowSteps state={state} /><DemoNotice /><OliviaBrief module="orders" state={state} />{statuses.forecast === 'validated' ? <ProductNeedsPanel state={state} update={update} notify={notify} /> : <LockedStep number={3} title="Waiting for validated sales" text="Return to Sales Forecast and validate the manager forecast. No final supplier quantities have been created." />}{statuses.needs === 'calculated' && statuses.forecast === 'validated' ? <SupplierOrderGroups state={state} update={update} openReview={openReview} /> : <LockedStep number={4} title="Supplier orders are not prepared" text="Calculate product needs first. Suggestions remain hidden until the required validation is complete." />}</>;
 }
 
 function Inventory({ state, update }: ScreenProps) {
@@ -520,7 +525,7 @@ function Inventory({ state, update }: ScreenProps) {
     const nextStatuses = statuses.forecast === 'validated' && statuses.needs === 'calculated' ? { ...state.productNeedsStatuses, [statuses.key]: 'recalculation-required' as ProductNeedsStatus } : state.productNeedsStatuses;
     update({ stocks: { ...state.stocks, [keyFor(state.locationId, product.id)]: Math.max(0, Math.floor(value || 0)) }, productNeedsStatuses: nextStatuses, supplierOrderStatuses: { ...state.supplierOrderStatuses, [statuses.key]: 'not-prepared' } });
   };
-  return <><ScreenTitle state={state} update={update} title="Inventory Inputs" subtitle="Count stock in product units; the validated workflow converts the resulting need into full supplier cases." /><DemoNotice /><section className="card"><div className="cardHead"><div><h2>Stock on hand</h2><p>Changing inventory after calculation requires product needs to be recalculated.</p></div><span className="pill">SAVED LOCALLY</span></div><div className="tableWrap"><table className="responsiveTable"><thead><tr><th>Product</th><th>Supplier</th><th>On hand</th><th>Confirmed incoming</th><th>Planning status</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td data-label="Product"><b>{product.name}</b><small>{product.unitsPerCase} {product.unitLabel}/case</small></td><td data-label="Supplier">{product.supplier}</td><td data-label="On hand"><input className="numberInput" type="number" min="0" value={stockOnHand(state, product)} onChange={(event) => setStock(product, Number(event.target.value))} /> {product.unitLabel}</td><td data-label="Confirmed incoming">{product.incomingUnits} {product.unitLabel}</td><td data-label="Planning status"><StatusBadge status={statuses.needs.replaceAll('-', ' ')} /></td></tr>)}</tbody></table></div></section></>;
+  return <><ScreenTitle state={state} update={update} title="Inventory Inputs" subtitle="Count stock in product units; the validated workflow converts the resulting need into full supplier cases." /><DemoNotice /><OliviaBrief module="inventory" state={state} compact /><section className="card"><div className="cardHead"><div><h2>Stock on hand</h2><p>Changing inventory after calculation requires product needs to be recalculated.</p></div><span className="pill">SAVED LOCALLY</span></div><div className="tableWrap"><table className="responsiveTable"><thead><tr><th>Product</th><th>Supplier</th><th>On hand</th><th>Confirmed incoming</th><th>Planning status</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td data-label="Product"><b>{product.name}</b><small>{product.unitsPerCase} {product.unitLabel}/case</small></td><td data-label="Supplier">{product.supplier}</td><td data-label="On hand"><input className="numberInput" type="number" min="0" value={stockOnHand(state, product)} onChange={(event) => setStock(product, Number(event.target.value))} /> {product.unitLabel}</td><td data-label="Confirmed incoming">{product.incomingUnits} {product.unitLabel}</td><td data-label="Planning status"><StatusBadge status={statuses.needs.replaceAll('-', ' ')} /></td></tr>)}</tbody></table></div></section></>;
 }
 
 function Suppliers({ state }: { state: PlannerState }) {
@@ -532,7 +537,7 @@ function Analytics({ state, update }: ScreenProps) {
   const rows = weeklyForecast(state);
   const statuses = getStatuses(state);
   const max = Math.max(...rows.map((day) => day.managerForecast));
-  return <><ScreenTitle state={state} update={update} eyebrow="OPERATIONS INTELLIGENCE" title="Forecast Analytics" subtitle="A focused view of expected sales; downstream quantities appear only after validation." controls={false} /><DemoNotice /><div className="analyticsGrid"><section className="card barPanel"><div className="cardHead"><div><h2>Seven-day manager forecast</h2><p>Demo sales · USD</p></div><StatusBadge status={statuses.forecast.replace('-', ' ')} /></div><div className="barList">{rows.map((day) => <div className="barRow" key={day.date}><span>{new Date(`${day.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' })}</span><i><b style={{ width: `${day.managerForecast / max * 100}%` }} /></i><strong>{currency(day.managerForecast)}</strong></div>)}</div></section><section className="card padded workflowHealth"><span className="eyebrow">WORKFLOW HEALTH</span><h2>{statuses.forecast === 'validated' ? 'Sales are validated' : 'Validation required'}</h2><p>{statuses.forecast === 'validated' ? 'The forecast can support product calculations.' : 'Product needs and supplier quantities remain intentionally unavailable.'}</p><a className="btn primary" href="#forecast">Open sales forecast <ArrowRight /></a></section></div></>;
+  return <><ScreenTitle state={state} update={update} eyebrow="OPERATIONS INTELLIGENCE" title="Forecast Analytics" subtitle="A focused view of expected sales; downstream quantities appear only after validation." controls={false} /><DemoNotice /><OliviaBrief module="analytics" state={state} /><div className="analyticsGrid"><section className="card barPanel"><div className="cardHead"><div><h2>Seven-day manager forecast</h2><p>Demo sales · USD</p></div><StatusBadge status={statuses.forecast.replace('-', ' ')} /></div><div className="barList">{rows.map((day) => <div className="barRow" key={day.date}><span>{new Date(`${day.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short' })}</span><i><b style={{ width: `${day.managerForecast / max * 100}%` }} /></i><strong>{currency(day.managerForecast)}</strong></div>)}</div></section><section className="card padded workflowHealth"><span className="eyebrow">WORKFLOW HEALTH</span><h2>{statuses.forecast === 'validated' ? 'Sales are validated' : 'Validation required'}</h2><p>{statuses.forecast === 'validated' ? 'The forecast can support product calculations.' : 'Product needs and supplier quantities remain intentionally unavailable.'}</p><a className="btn primary" href="#forecast">Open sales forecast <ArrowRight /></a></section></div></>;
 }
 
 function Corporate({ state, update }: ScreenProps) {
@@ -592,9 +597,65 @@ const moduleGuidance: Record<Route, string> = {
   settings: 'These weather adjustments are explicit provisional business rules, not AI predictions.',
 };
 
-function OliviaOne({ module }: { module: Route; state: PlannerState }) {
-  const [open, setOpen] = useState(false);
-  return <section className={`oliviaOne ${open ? 'open' : ''}`}><button className="oliviaToggle" onClick={() => setOpen(!open)} aria-expanded={open}><span><BrainCircuit /></span><b>Olivia One</b><small>Decision assistant</small><ChevronRight /></button>{open && <div className="oliviaBody"><div><span className="eyebrow">CONTEXT · {module.toUpperCase()}</span><h2>What needs your attention</h2></div><p>{moduleGuidance[module]}</p><small>Olivia One advises. You remain responsible for every validation and order.</small></div>}</section>;
+type OliviaInsight = { summary: string; alerts: string[]; opportunities: string[]; recommended_actions: string[]; confidence_note: string };
+
+function localOliviaInsight(module: Route, state: PlannerState): OliviaInsight {
+  const days = weeklyForecast(state);
+  const statuses = getStatuses(state);
+  const sales = days.reduce((sum, day) => sum + day.managerForecast, 0);
+  const historical = days.reduce((sum, day) => sum + day.historicalSales, 0);
+  const peak = days.reduce((highest, day) => day.managerForecast > highest.managerForecast ? day : highest, days[0]);
+  const needs = products.map((product) => productNeed(state, product));
+  const artimexCases = products.filter((product) => product.supplier === 'Artimex').reduce((sum, product) => sum + plannedQuantity(state, product), 0);
+  if (module === 'forecast' || module === 'dashboard') return {
+    summary: `${currency(sales)} is expected for the week. Weather changes the comparable-sales baseline by ${sales - historical >= 0 ? '+' : '−'}${currency(Math.abs(sales - historical))}.`,
+    alerts: statuses.forecast === 'validated' ? ['Sales are validated; a change will require downstream needs and orders to be reviewed.'] : ['Sales forecast is still a draft. Product quantities intentionally remain locked.'],
+    opportunities: [`${new Date(`${peak.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' })} is the peak forecast day at ${currency(peak.managerForecast)}; confirm staffing and availability before validation.`],
+    recommended_actions: [statuses.forecast === 'validated' ? 'Calculate product needs using the validated sales forecast.' : 'Review manager overrides, then validate the seven-day sales forecast.'],
+    confidence_note: 'Demo reasoning uses displayed comparable sales and provisional weather rules; it is not a live POS or weather prediction.',
+  };
+  if (module === 'orders') return {
+    summary: statuses.needs === 'calculated' ? `${needs.filter((need) => need.netRequirement > 0).length} products require replenishment. Artimex represents ${artimexCases} planned cases for this restaurant.` : 'Supplier quantities are intentionally unavailable until sales are validated and product needs are calculated.',
+    alerts: statuses.needs === 'calculated' ? needs.map((need, index) => ({ need, product: products[index] })).filter(({ need }) => need.netRequirement > 0).slice(0, 2).map(({ need, product }) => `${product.name.split(' · ')[0]}: ${number(need.netRequirement)} units converts to ${need.suggestedCases} complete cases.`) : ['Validate sales first; this prevents orders from being treated as decided too early.'],
+    opportunities: ['Use each “Why cases?” explanation to confirm inventory, safety stock, and packaging before approval.'],
+    recommended_actions: [statuses.needs === 'calculated' ? 'Review manager case adjustments, then prepare the supplier order for approval.' : 'Return to Sales Forecast to unlock the calculation chain.'],
+    confidence_note: 'Demo reasoning follows the visible units, safety stock, inventory, and case-conversion formulas.',
+  };
+  if (module === 'inventory') return {
+    summary: `${products.length} inventory positions are available for review. Stock is held in product units so the supplier case conversion remains auditable.`,
+    alerts: statuses.needs === 'calculated' ? ['Changing on-hand inventory now will mark product requirements for recalculation.'] : ['Inventory can be updated now; no calculated order is being changed.'],
+    opportunities: [`Prioritize a physical count for ${products[0].name.split(' · ')[0]} before the next supplier approval.`],
+    recommended_actions: ['Confirm on-hand counts, then recalculate product needs if the sales forecast has already been validated.'],
+    confidence_note: 'Demo reasoning uses locally entered inventory; it is not an inventory-system synchronization.',
+  };
+  if (module === 'analytics') return {
+    summary: `The weekly manager forecast is ${currency(sales)}. ${new Date(`${peak.date}T12:00:00`).toLocaleDateString('en-US', { weekday: 'long' })} is the highest expected-sales day at ${currency(peak.managerForecast)}.`,
+    alerts: [`Weather accounts for ${sales - historical >= 0 ? '+' : '−'}${currency(Math.abs(sales - historical))} versus comparable weekday sales.`],
+    opportunities: ['Use the peak-day pattern to review labor, production capacity, and fresh inventory before the week starts.'],
+    recommended_actions: [statuses.forecast === 'validated' ? 'Use this validated pattern to calculate product needs.' : 'Validate manager sales before treating this pattern as an operational input.'],
+    confidence_note: 'Demo reasoning is based only on the displayed forecast and business rules.',
+  };
+  return {
+    summary: moduleGuidance[module], alerts: [], opportunities: [], recommended_actions: ['Review the visible operational inputs before making a manager decision.'],
+    confidence_note: 'Demo reasoning is based only on the information shown in this workspace.',
+  };
+}
+
+function OliviaBrief({ module, state, compact = false }: { module: Route; state: PlannerState; compact?: boolean }) {
+  const fallback = useMemo(() => localOliviaInsight(module, state), [module, state]);
+  const [insight, setInsight] = useState<OliviaInsight | null>(null);
+  const [status, setStatus] = useState<'idle' | 'loading' | 'live-error'>('idle');
+  const days = weeklyForecast(state);
+  const analyze = async () => {
+    if (!apiBase) return;
+    setStatus('loading');
+    try {
+      const response = await api<{ insight: OliviaInsight }>('/api/analytics/insights', { method: 'POST', body: JSON.stringify({ module, restaurantSlug: state.locationId, period: { from: state.date, to: days[days.length - 1].date }, metrics: { forecastSales: days.reduce((sum, day) => sum + day.managerForecast, 0), forecastStatus: getStatuses(state).forecast, products: products.map((product) => ({ name: product.name, onHand: stockOnHand(state, product), suggestedCases: productNeed(state, product).suggestedCases })) } }) });
+      setInsight(response.insight); setStatus('idle');
+    } catch { setStatus('live-error'); }
+  };
+  const current = insight ?? fallback;
+  return <section className={`aiPanel ${compact ? 'aiCompact' : ''}`} aria-label="Olivia One recommendations"><div className="aiPanelHead"><span className="aiIcon"><BrainCircuit /></span><div><span className="eyebrow">OLIVIA ONE · DECISION SUPPORT</span><h2>{compact ? 'Olivia’s recommended next move' : 'Olivia One operational briefing'}</h2><p>{insight ? 'Live Hugging Face analysis · based on the current workspace inputs' : 'Decision support from the current planning data'}</p></div>{apiBase && <button className="btn" onClick={analyze} disabled={status === 'loading'}>{status === 'loading' ? 'Analyzing…' : 'Refresh AI analysis'}</button>}</div><div className="insightBody"><p className="insightSummary">{current.summary}</p>{current.alerts.length > 0 && <div><h3>Watch</h3><ul>{current.alerts.map((item) => <li key={item}>{item}</li>)}</ul></div>}{!compact && <div><h3>Opportunity</h3><ul>{current.opportunities.map((item) => <li key={item}>{item}</li>)}</ul></div>}<div><h3>Recommended action</h3><ul>{current.recommended_actions.map((item) => <li key={item}>{item}</li>)}</ul></div><small>{status === 'live-error' ? 'Live Hugging Face analysis is unavailable; showing transparent demo reasoning.' : current.confidence_note}</small></div></section>;
 }
 
 function Modal({ close, children }: { close: () => void; children: ReactNode }) {
