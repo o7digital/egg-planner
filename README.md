@@ -36,13 +36,14 @@ Définir `PUBLIC_API_URL=http://localhost:3000` dans `.env` pour activer la conn
 
 ## Parcours de démonstration
 
-1. Choisir un restaurant et une date.
-2. Simuler une météo depuis **Dashboard** ou **Sales Forecast**.
-3. Modifier le stock dans **Inventory** et vérifier les suggestions.
-4. Ajuster les cartons dans **Suggested Orders**.
-5. Ouvrir la revue et confirmer la commande de démonstration.
-6. Vérifier **Corporate Overview**, **Artimex Consolidation** et **Order History**.
-7. Exporter le CSV de planification Artimex si nécessaire.
+1. Choisir un restaurant et le début de la fenêtre de sept jours.
+2. Examiner la météo de démonstration, les quatre jours comparables et la prévision suggérée.
+3. Ajuster si nécessaire les prévisions manager, puis cliquer **Validate Sales Forecast**.
+4. Cliquer **Calculate Product Needs** pour appliquer les ratios, le stock de sécurité et l’inventaire en unités.
+5. Examiner la conversion du besoin net en cartons complets, puis ajuster les commandes par fournisseur.
+6. Valider la commande préparée. Aucune commande réelle n’est envoyée.
+7. Vérifier que les lignes Artimex validées apparaissent dans **Artimex Consolidation**, séparément du calcul de production.
+8. Modifier une prévision validée pour constater l’invalidation des besoins et le retrait de la consolidation jusqu’au recalcul.
 
 Une nouvelle confirmation pour le même restaurant et la même date remplace la commande active dans les vues consolidées. Chaque confirmation reste néanmoins visible dans l’historique de démonstration.
 
@@ -58,16 +59,19 @@ Une nouvelle confirmation pour le même restaurant et la même date remplace la 
 - `src/styles/global.css` : design global et adaptation mobile.
 - `public/brand/el-gallo-giro-logo.png` : logo de marque provenant du site officiel gallogiro.com.
 - `src/lib/calculations.test.ts` : tests des règles métier principales.
+- `src/components/App.test.tsx` : test d’intégration du parcours Canoga Park et de toutes les routes.
 - `backend/src` : API, authentification serveur, météo et permissions.
 - `backend/migrations` : schéma PostgreSQL versionné.
 
 ## Règles de calcul
 
-- Prévision des ventes = moyenne historique du même jour de semaine × facteur météo × facteur de tendance.
-- Météo initiale : chaud −30 %, froid +40 %, doux 0 %. Les valeurs sont modifiables dans **Rules & Settings**.
-- Consommation prévue : consommation historique × mêmes facteurs, arrondie au carton supérieur.
-- Commande suggérée = `max(0, consommation prévue + stock de sécurité − stock disponible)`.
-- Une quantité saisie manuellement prend la priorité sur la suggestion et est conservée localement.
+- Prévision suggérée = ventes historiques de quatre jours de semaine comparables × ajustement météo.
+- Règles initiales : très chaud −30 %, chaud −15 %, doux 0 %, froid +40 %. Elles sont configurables et explicitement présentées comme règles métier provisoires.
+- Consommation attendue = prévision manager validée ÷ 1 000 × ratio produit par tranche de 1 000 dollars.
+- Besoin net = `max(0, consommation + stock de sécurité − stock disponible − réceptions confirmées)`.
+- Cartons requis = `ceil(besoin net ÷ unités par carton)` ; les commandes négatives sont impossibles.
+- Une prévision non validée ne crée aucun besoin ni aucune commande fournisseur finale.
+- Seules les commandes restaurant validées alimentent la consolidation Artimex. La production Artimex est calculée séparément après marge, stock congelé et production déjà planifiée.
 
 ## Persistance et réinitialisation
 
