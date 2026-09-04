@@ -127,6 +127,7 @@ main { padding:25px 30px 20px; }.titlebar { margin-bottom:14px; }.titlebar h1 { 
 
 /* Sequential planning workflow */
 .weekHorizon{padding:7px 10px;border-radius:5px;color:#6f625d;background:#f3eee5;font-size:12px;font-weight:700;white-space:nowrap}
+.languageSelect{width:54px!important;min-width:54px!important;padding-inline:8px!important;font-weight:800!important;letter-spacing:.4px}
 .subtleNotice{margin-bottom:18px;padding:10px 14px;font-size:11px;box-shadow:none}
 .fiveSteps{display:flex;width:100%;gap:0;margin:4px 0 16px;padding:10px;border:1px solid var(--border);border-radius:9px;background:#fff;box-shadow:0 3px 12px #30201e08}
 .stepPair{min-width:0;display:flex;align-items:center;flex:1}.stepPair>span{min-width:0;flex:1;display:grid;grid-template-columns:30px minmax(0,1fr);grid-template-rows:auto auto;column-gap:9px;padding:8px;border-radius:7px;color:#8d8581}

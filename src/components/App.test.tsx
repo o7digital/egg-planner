@@ -13,6 +13,7 @@ const navigate = (hash: string) => {
 describe('Canoga Park sequential workflow', () => {
   beforeEach(() => {
     window.localStorage.removeItem(STORAGE_KEY);
+    window.localStorage.removeItem('gallo-giro-ops-planner:language');
     window.location.hash = '#dashboard';
     window.scrollTo = vi.fn();
   });
@@ -84,5 +85,14 @@ describe('Canoga Park sequential workflow', () => {
       navigate(`#${route}`);
       await waitFor(() => expect(document.querySelector('main h1')).toHaveTextContent(title));
     }
+  });
+
+  it('switches the shared interface to Spanish and persists the preference', async () => {
+    render(<App />);
+    await screen.findByRole('heading', { name: 'Weekly Planning — Canoga Park' });
+    fireEvent.change(screen.getByLabelText('Language'), { target: { value: 'es' } });
+    await waitFor(() => expect(document.querySelector('main h1')).toHaveTextContent('Planificación semanal — Canoga Park'));
+    expect(screen.getByText('Pronóstico de ventas')).toBeInTheDocument();
+    expect(window.localStorage.getItem('gallo-giro-ops-planner:language')).toBe('es');
   });
 });

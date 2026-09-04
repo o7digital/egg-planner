@@ -32,6 +32,88 @@ const pages = [
 ] as const;
 type Route = typeof pages[number][0];
 type ScreenProps = { state: PlannerState; update: (patch: Partial<PlannerState>) => void };
+type Language = 'en' | 'es';
+
+const LANGUAGE_STORAGE_KEY = 'gallo-giro-ops-planner:language';
+const spanishText: Record<string, string> = {
+  'Dashboard': 'Panel', 'Sales Forecast': 'Pronóstico de ventas', 'Analytics': 'Análisis', 'Supplier Orders': 'Pedidos a proveedores',
+  'Inventory': 'Inventario', 'Suppliers': 'Proveedores', 'Corporate Overview': 'Vista corporativa', 'Artimex Consolidation': 'Consolidación Artimex',
+  'Order History': 'Historial de pedidos', 'Rules & Settings': 'Reglas y configuración', 'WORKSPACE': 'ESPACIO DE TRABAJO',
+  'Independent demo workspace': 'Espacio de demostración independiente', 'From forecast to the next delivery.': 'Del pronóstico a la próxima entrega.',
+  'Demo mode · no real permissions': 'Modo demo · sin permisos reales', 'Restaurant': 'Restaurante', 'RESTAURANT': 'RESTAURANTE', 'Week starting': 'Semana que inicia',
+  '7-day planning window': 'Ventana de planificación de 7 días', 'SAMPLE DATA': 'DATOS DE MUESTRA', 'CONNECTED DEMO': 'DEMO CONECTADA',
+  'Manager demo': 'Demo gerente', 'Corporate demo': 'Demo corporativa', 'Sign out': 'Cerrar sesión',
+  'Interactive demo · Fictional data · No live weather, POS, inventory sync, supplier connection or real order sending': 'Demo interactiva · Datos ficticios · Sin clima, POS, inventario, proveedores ni envío de pedidos en tiempo real',
+  'Weather & Sales': 'Clima y ventas', 'Validate Sales': 'Validar ventas', 'Product Needs': 'Necesidades de producto', 'Artimex Production': 'Producción Artimex',
+  'completed': 'completado', 'current': 'actual', 'pending': 'pendiente', 'draft': 'borrador', 'validated': 'validado', 'needs review': 'requiere revisión',
+  'waiting for sales': 'esperando ventas', 'calculated': 'calculado', 'recalculation required': 'requiere recálculo', 'not prepared': 'no preparado',
+  'included in consolidation': 'incluido en consolidación', 'not included': 'no incluido', 'production planned': 'producción planificada',
+  'RESTAURANT OPERATIONS': 'OPERACIONES DEL RESTAURANTE', 'Weekly Planning — ': 'Planificación semanal — ',
+  'Turn weather and sales expectations into the quantities needed for the next deliveries.': 'Convierte las expectativas de clima y ventas en las cantidades necesarias para las próximas entregas.',
+  '7-day sales forecast': 'Pronóstico de ventas de 7 días', 'Weather effect': 'Efecto del clima', 'Forecast status': 'Estado del pronóstico',
+  'Products requiring action': 'Productos que requieren acción', 'Orders ready': 'Pedidos listos',
+  'Demo assumptions:': 'Supuestos de demo:', 'sample weather, comparable sales, inventory, ratios and schedules. Current rules are not machine-learning predictions.': 'clima, ventas comparables, inventario, ratios y calendarios de muestra. Las reglas actuales no son predicciones de aprendizaje automático.',
+  'STEP 1 · FORECAST INPUT': 'PASO 1 · INSUMO DEL PRONÓSTICO', 'Weather and expected sales impact': 'Clima e impacto esperado en ventas',
+  'Demo weather': 'Clima de demostración', 'Current business rules': 'Reglas de negocio actuales', 'Very hot': 'Muy caluroso', 'Hot': 'Caluroso', 'Mild': 'Templado', 'Cold': 'Frío',
+  'No adjustment': 'Sin ajuste', 'expected sales': 'ventas esperadas', 'STEP 2 · MANAGER DECISION': 'PASO 2 · DECISIÓN DEL GERENTE',
+  'Validate expected sales': 'Validar ventas esperadas', 'Review the system suggestion, override it when needed, then validate the seven-day forecast.': 'Revisa la sugerencia del sistema, ajústala si es necesario y valida el pronóstico de siete días.',
+  'Day': 'Día', 'Weather': 'Clima', 'Historical sales': 'Ventas históricas', 'Weather impact': 'Impacto del clima', 'Suggested sales': 'Ventas sugeridas',
+  'Manager forecast': 'Pronóstico del gerente', 'Status / details': 'Estado / detalles', 'Current business rule': 'Regla de negocio actual',
+  'How calculated': 'Cómo se calculó', 'Historical average': 'Promedio histórico', 'Weather adjustment': 'Ajuste por clima', 'Calculated forecast': 'Pronóstico calculado',
+  'Average of 4 comparable weekdays · demo data': 'Promedio de 4 días de semana comparables · datos de demo', 'Manager forecasts are saved locally as demo data.': 'Los pronósticos del gerente se guardan localmente como datos de demo.', 'Save Draft': 'Guardar borrador',
+  'Validate Sales Forecast': 'Validar pronóstico de ventas', 'Edit forecast': 'Editar pronóstico',
+  'Sales forecast validated. Product requirements can now be calculated.': 'Pronóstico de ventas validado. Ahora se pueden calcular las necesidades de producto.',
+  'STEP 3 · PENDING': 'PASO 3 · PENDIENTE', 'STEP 4 · PENDING': 'PASO 4 · PENDIENTE', 'STEP 5 · PENDING': 'PASO 5 · PENDIENTE',
+  'Calculate product needs': 'Calcular necesidades de producto', 'Validate the manager sales forecast to unlock consumption, safety stock and inventory calculations.': 'Valida el pronóstico del gerente para desbloquear los cálculos de consumo, stock de seguridad e inventario.',
+  'Prepare supplier orders': 'Preparar pedidos a proveedores', 'Product needs must be calculated from a validated forecast before order quantities are shown.': 'Las necesidades de producto deben calcularse desde un pronóstico validado antes de mostrar cantidades de pedido.',
+  'Artimex production': 'Producción Artimex', 'Only validated restaurant orders enter the separate corporate production plan.': 'Solo los pedidos validados de restaurantes entran al plan corporativo de producción.',
+  'Order included in Artimex consolidation': 'Pedido incluido en la consolidación Artimex', 'The restaurant orders product. Artimex separately plans production from all validated restaurant orders.': 'El restaurante pide producto. Artimex planifica la producción por separado con todos los pedidos validados.',
+  'View consolidation': 'Ver consolidación', 'STEP 3 · PRODUCT CONSUMPTION': 'PASO 3 · CONSUMO DE PRODUCTO',
+  'Validated sales → expected use → safety stock → inventory → net requirement → full cases.': 'Ventas validadas → uso esperado → stock de seguridad → inventario → necesidad neta → cajas completas.',
+  'Requirement horizon: selected day only (demo)': 'Horizonte de requerimiento: solo el día seleccionado (demo)',
+  'Delivery schedule to configure. The architecture can replace this with current date → next confirmed supplier delivery.': 'Calendario de entregas por configurar. La arquitectura puede reemplazarlo con fecha actual → próxima entrega confirmada.',
+  'validated sales': 'ventas validadas', 'Ready to apply each product’s consumption ratio and inventory position.': 'Listo para aplicar el ratio de consumo y posición de inventario de cada producto.',
+  'Calculate Product Needs': 'Calcular necesidades de producto', 'Product': 'Producto', 'Validated sales × ratio': 'Ventas validadas × ratio', 'Expected + safety': 'Esperado + seguridad',
+  'Inventory position': 'Posición de inventario', 'Net requirement': 'Necesidad neta', 'Case conversion': 'Conversión a cajas', 'Never below zero': 'Nunca menor que cero',
+  'Why ': 'Por qué ', 'Validated sales': 'Ventas validadas', 'Consumption ratio': 'Ratio de consumo', 'Expected use': 'Uso esperado', 'Safety stock': 'Stock de seguridad', 'On hand': 'En existencia', 'Incoming': 'En tránsito', 'Net need': 'Necesidad neta', 'Case size': 'Tamaño de caja', 'ORDER': 'PEDIDO',
+  'STEP 4 · RESTAURANT ORDER': 'PASO 4 · PEDIDO DEL RESTAURANTE',
+  'Edit final whole-case quantities. No order will be sent in this demo.': 'Edita las cantidades finales de cajas completas. No se enviará ningún pedido en esta demo.',
+  'FROZEN BAKERY SUPPLIER': 'PROVEEDOR DE PANADERÍA CONGELADA', 'DEMO SUPPLIER': 'PROVEEDOR DEMO', 'Next delivery: to configure': 'Próxima entrega: por configurar',
+  'products · schedule not assumed': 'productos · calendario no asumido', 'Need': 'Necesidad', 'Packaging': 'Empaque', 'Suggested': 'Sugerido', 'Manager order': 'Pedido del gerente', 'Adjustment': 'Ajuste',
+  'Order prepared': 'Pedido preparado', 'estimated demo value · ready for approval, not sending': 'valor estimado demo · listo para aprobación, sin envío', 'Validate Supplier Order': 'Validar pedido al proveedor',
+  'Sales Forecast — ': 'Pronóstico de ventas — ', 'Understand the weather rule, set manager expectations and validate before calculating product needs.': 'Entiende la regla de clima, define las expectativas del gerente y valida antes de calcular necesidades.',
+  'Product Needs & Supplier Orders': 'Necesidades de producto y pedidos a proveedores', 'Restaurant demand only: validated sales become product needs, then manager-approved supplier quantities.': 'Solo demanda del restaurante: las ventas validadas se convierten en necesidades y luego en cantidades aprobadas por el gerente.',
+  'Waiting for validated sales': 'Esperando ventas validadas', 'Return to Sales Forecast and validate the manager forecast. No final supplier quantities have been created.': 'Regresa al pronóstico de ventas y valida el pronóstico del gerente. No se han creado cantidades finales.',
+  'Supplier orders are not prepared': 'Los pedidos a proveedores no están preparados', 'Calculate product needs first. Suggestions remain hidden until the required validation is complete.': 'Primero calcula las necesidades. Las sugerencias permanecen ocultas hasta completar la validación.',
+  'Inventory Inputs': 'Entradas de inventario', 'Count stock in product units; the validated workflow converts the resulting need into full supplier cases.': 'Cuenta inventario en unidades; el flujo validado convierte la necesidad resultante en cajas completas.',
+  'Stock on hand': 'Inventario disponible', 'Changing inventory after calculation requires product needs to be recalculated.': 'Cambiar el inventario después del cálculo requiere recalcular las necesidades.',
+  'SAVED LOCALLY': 'GUARDADO LOCALMENTE', 'Supplier': 'Proveedor', 'Confirmed incoming': 'Entradas confirmadas', 'Planning status': 'Estado de planificación',
+  'Your Supply Network': 'Tu red de suministro', 'Supplier packaging is configured; delivery calendars still require confirmation.': 'El empaque de proveedores está configurado; los calendarios de entrega aún requieren confirmación.',
+  'demo products': 'productos demo', 'Delivery schedule and cutoff: to configure.': 'Calendario de entrega y hora límite: por configurar.', 'View planning': 'Ver planificación',
+  'OPERATIONS INTELLIGENCE': 'INTELIGENCIA OPERATIVA', 'Forecast Analytics': 'Análisis del pronóstico', 'A focused view of expected sales; downstream quantities appear only after validation.': 'Una vista enfocada de las ventas esperadas; las cantidades posteriores aparecen solo tras la validación.',
+  'Seven-day manager forecast': 'Pronóstico del gerente de siete días', 'Demo sales · USD': 'Ventas demo · USD', 'WORKFLOW HEALTH': 'ESTADO DEL FLUJO', 'Sales are validated': 'Las ventas están validadas',
+  'Validation required': 'Se requiere validación', 'The forecast can support product calculations.': 'El pronóstico puede respaldar los cálculos de producto.', 'Product needs and supplier quantities remain intentionally unavailable.': 'Las necesidades de producto y cantidades de proveedor permanecen intencionalmente no disponibles.', 'Open sales forecast': 'Abrir pronóstico de ventas',
+  'CORPORATE WORKSPACE': 'ESPACIO CORPORATIVO', 'Every Location. One Clear View.': 'Cada ubicación. Una vista clara.', 'Validated restaurant orders are distinct from Artimex production planning.': 'Los pedidos validados de restaurantes son distintos de la planificación de producción Artimex.',
+  'Restaurant workflow overview': 'Resumen del flujo por restaurante', 'Open Artimex consolidation': 'Abrir consolidación Artimex', 'Restaurant order': 'Pedido del restaurante', 'Artimex cases': 'Cajas Artimex', 'Artimex status': 'Estado Artimex', 'Open →': 'Abrir →',
+  'STEP 5 · CORPORATE WORKSPACE': 'PASO 5 · ESPACIO CORPORATIVO', 'Artimex Production Consolidation': 'Consolidación de producción Artimex', 'Validated restaurant orders are aggregated first; Artimex inventory and safety margin then determine production.': 'Primero se agregan los pedidos validados; después el inventario y margen de Artimex determinan la producción.',
+  'RESTAURANTS ORDER PRODUCT': 'LOS RESTAURANTES PIDEN PRODUCTO', 'ARTIMEX PLANS PRODUCTION': 'ARTIMEX PLANIFICA PRODUCCIÓN', 'Sales → consumption → net need → supplier cases': 'Ventas → consumo → necesidad neta → cajas del proveedor', 'Validated network demand → inventory → production': 'Demanda validada de la red → inventario → producción',
+  'Validated restaurant demand': 'Demanda validada de restaurantes', 'only validated orders · no draft estimates': 'solo pedidos validados · sin estimaciones de borrador', 'Export validated CSV': 'Exportar CSV validado', 'Total': 'Total', 'Status': 'Estado', 'TOTAL VALIDATED': 'TOTAL VALIDADO',
+  'ARTIMEX PRODUCTION': 'PRODUCCIÓN ARTIMEX', 'Safety margin': 'Margen de seguridad', 'Frozen stock available': 'Inventario congelado disponible', 'Already planned production': 'Producción ya planificada', 'Production required': 'Producción requerida',
+  'Production results are demo planning figures. No factory system or Global Bake integration is connected.': 'Los resultados de producción son cifras de planificación demo. No hay conexión con fábrica ni Global Bake.',
+  'Decision History': 'Historial de decisiones', 'Validated demo supplier orders saved in this browser.': 'Pedidos demo validados guardados en este navegador.', 'Order': 'Pedido', 'Planning date': 'Fecha de planificación', 'Estimated total': 'Total estimado',
+  'No manager orders validated yet': 'Aún no hay pedidos del gerente validados', 'Complete the restaurant workflow to create a demo order.': 'Completa el flujo del restaurante para crear un pedido demo.', 'Open weekly planning': 'Abrir planificación semanal',
+  'Configure Charles’s provisional weather assumptions. These are business rules, not trained predictions.': 'Configura los supuestos provisionales de clima de Charles. Son reglas de negocio, no predicciones entrenadas.',
+  'CURRENT BUSINESS RULE': 'REGLA DE NEGOCIO ACTUAL', 'Replace these sample rules when real restaurant weather elasticity is available.': 'Reemplaza estas reglas de muestra cuando exista elasticidad climática real del restaurante.',
+  'Very hot adjustment (%)': 'Ajuste por muy caluroso (%)', 'Hot adjustment (%)': 'Ajuste por caluroso (%)', 'Cold adjustment (%)': 'Ajuste por frío (%)',
+  'Forecast Sales': 'Pronóstico de ventas', 'Product Need': 'Necesidad de producto', 'Cases': 'Cajas', 'Mild weather remains 0% · demo configuration': 'El clima templado se mantiene en 0% · configuración demo', 'Save business rules': 'Guardar reglas de negocio',
+  'Local demo data': 'Datos demo locales', 'Clear manager forecasts, stock edits, order adjustments and history.': 'Borra pronósticos del gerente, ajustes de inventario, pedidos e historial.', 'Reset demo data': 'Restablecer datos demo',
+  'ORDER READY FOR APPROVAL': 'PEDIDO LISTO PARA APROBACIÓN', 'Validate these restaurant supplier quantities for ': 'Valida estas cantidades del proveedor para ', 'This action does not send an order.': 'Esta acción no envía un pedido.',
+  'adjustment': 'ajuste', 'Estimated demo total': 'Total estimado demo', 'Validation includes the Artimex items in corporate consolidation. No supplier integration exists and nothing is transmitted.': 'La validación incluye artículos Artimex en la consolidación corporativa. No existe integración de proveedor ni se transmite nada.', 'Back': 'Volver',
+  'Olivia One': 'Olivia One', 'Decision assistant': 'Asistente de decisiones', 'What needs your attention': 'Qué requiere tu atención', 'Olivia One advises. You remain responsible for every validation and order.': 'Olivia One asesora. Tú sigues siendo responsable de cada validación y pedido.',
+  'Cancel': 'Cancelar', 'RESET DEMO': 'RESTABLECER DEMO', 'Reset all local data?': '¿Restablecer todos los datos locales?', 'This removes manager forecasts, stock edits, order adjustments and demo history stored in this browser.': 'Esto elimina pronósticos del gerente, ajustes de inventario, pedidos e historial demo guardados en este navegador.',
+  'Language': 'Idioma', 'MON': 'LUN', 'TUE': 'MAR', 'WED': 'MIÉ', 'THU': 'JUE', 'FRI': 'VIE', 'SAT': 'SÁB', 'SUN': 'DOM',
+  'Monday': 'Lunes', 'Tuesday': 'Martes', 'Wednesday': 'Miércoles', 'Thursday': 'Jueves', 'Friday': 'Viernes', 'Saturday': 'Sábado', 'Sunday': 'Domingo',
+};
 
 const currency = (value: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(value);
 const number = (value: number) => new Intl.NumberFormat('en-US').format(value);
@@ -42,6 +124,75 @@ const currentRoute = (): Route => {
   return pages.some(([id]) => id === route) ? route as Route : 'dashboard';
 };
 
+const sourceText = new WeakMap<Text, string>();
+const sourceAttributes = new WeakMap<Element, Record<string, string>>();
+
+function translateSpanish(source: string) {
+  const exact = spanishText[source] ?? spanishText[source.trim()];
+  if (exact) return source.trim() === source ? exact : source.replace(source.trim(), exact);
+  return source
+    .replace(/^Weekly Planning — /, 'Planificación semanal — ')
+    .replace(/^Sales Forecast — /, 'Pronóstico de ventas — ')
+    .replace(/\bcases\b/gi, 'cajas')
+    .replace(/\bcase\b/gi, 'caja')
+    .replace(/\bunits\b/gi, 'unidades')
+    .replace(/\bon hand\b/gi, 'en existencia')
+    .replace(/\bexpected sales\b/gi, 'ventas esperadas')
+    .replace(/\bCurrent business rules\b/g, 'Reglas de negocio actuales')
+    .replace(/\bPENDING\b/g, 'PENDIENTE')
+    .replace(/\bMon\b/g, 'Lun')
+    .replace(/\bTue\b/g, 'Mar')
+    .replace(/\bWed\b/g, 'Mié')
+    .replace(/\bThu\b/g, 'Jue')
+    .replace(/\bFri\b/g, 'Vie')
+    .replace(/\bSat\b/g, 'Sáb')
+    .replace(/\bSun\b/g, 'Dom')
+    .replace(/\bCurrent business rule\b/g, 'Regla de negocio actual')
+    .replace(/\bManager forecast\b/g, 'Pronóstico del gerente')
+    .replace(/\bSystem suggestion\b/g, 'Sugerencia del sistema')
+    .replace(/\bHow calculated\b/g, 'Cómo se calculó');
+}
+
+function useLocalizedInterface(language: Language) {
+  useEffect(() => {
+    document.documentElement.lang = language;
+    document.documentElement.dir = 'ltr';
+    document.title = language === 'es' ? 'Gallo Giro | Planificador Operativo' : 'Gallo Giro | Ops Planner';
+    const localize = () => {
+      const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+      let node = walker.nextNode();
+      while (node) {
+        const text = node as Text;
+        const parent = text.parentElement;
+        if (parent && !['SCRIPT', 'STYLE'].includes(parent.tagName)) {
+          const previous = sourceText.get(text);
+          const current = text.nodeValue ?? '';
+          const expected = previous === undefined ? undefined : language === 'es' ? translateSpanish(previous) : previous;
+          const original = previous === undefined || current !== expected ? current : previous;
+          sourceText.set(text, original);
+          text.nodeValue = language === 'es' ? translateSpanish(original) : original;
+        }
+        node = walker.nextNode();
+      }
+      document.querySelectorAll<HTMLElement>('[aria-label], [title], [placeholder]').forEach((element) => {
+        const original = sourceAttributes.get(element) ?? {};
+        ['aria-label', 'title', 'placeholder'].forEach((attribute) => {
+          const value = element.getAttribute(attribute);
+          if (value !== null && original[attribute] === undefined) original[attribute] = value;
+          if (original[attribute] !== undefined) element.setAttribute(attribute, language === 'es' ? translateSpanish(original[attribute]) : original[attribute]);
+        });
+        sourceAttributes.set(element, original);
+      });
+    };
+    localize();
+    const observer = new MutationObserver((mutations) => {
+      if (mutations.some((mutation) => mutation.type === 'childList' && mutation.addedNodes.length)) localize();
+    });
+    observer.observe(document.body, { childList: true, subtree: true });
+    return () => observer.disconnect();
+  });
+}
+
 export default function App() {
   const [state, setState] = useState<PlannerState>(initialState);
   const [ready, setReady] = useState(false);
@@ -50,15 +201,21 @@ export default function App() {
   const [resetOpen, setResetOpen] = useState(false);
   const [notice, setNotice] = useState('');
   const [session, setSession] = useState<SessionUser | null | undefined>(undefined);
+  const [language, setLanguage] = useState<Language>('en');
+  useLocalizedInterface(language);
 
   useEffect(() => {
     setState(loadState());
     setRoute(currentRoute());
+    const requestedLanguage = new URLSearchParams(window.location.search).get('lang');
+    const savedLanguage = window.localStorage.getItem(LANGUAGE_STORAGE_KEY);
+    if (requestedLanguage === 'es' || savedLanguage === 'es') setLanguage('es');
     setReady(true);
     const onHashChange = () => { setRoute(currentRoute()); window.scrollTo(0, 0); };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
+  useEffect(() => { if (ready) window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language); }, [language, ready]);
   useEffect(() => {
     if (!apiBase) { setSession(null); return; }
     api<{ user: SessionUser }>('/api/auth/me').then(({ user }) => setSession(user)).catch(() => setSession(null));
@@ -124,7 +281,7 @@ export default function App() {
 
   if (apiBase && session === undefined) return <div className="authPage"><p>Loading secure workspace…</p></div>;
   if (apiBase && !session) return <Login onLogin={setSession} />;
-  return <div className="shell">
+  return <div className="shell" data-language={language}>
     <aside className="sidebar">
       <div className="brandPanel"><a className="brand" href="#dashboard"><img src="/brand/el-gallo-giro-logo.png" alt="El Gallo Giro" /><span>OPERATIONS PLANNER</span></a></div>
       <div className="navlabel">WORKSPACE</div>
@@ -138,7 +295,7 @@ export default function App() {
           <label><CalendarDays /> Week starting<input type="date" value={state.date} onChange={(event) => event.target.value && update({ date: event.target.value })} /></label>
           <span className="weekHorizon">7-day planning window</span>
         </div>
-        <div className="headright"><span className="demoBadge">{apiBase ? 'CONNECTED DEMO' : 'SAMPLE DATA'}</span>{session ? <><span className="sessionUser">{session.name}<small>{session.role.replace('_', ' ')}</small></span><button className="btn compact" onClick={async () => { await api('/api/auth/logout', { method: 'POST' }); setSession(null); }}>Sign out</button></> : <select aria-label="Demo view mode" value={state.viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}><option value="manager">Manager demo</option><option value="corporate">Corporate demo</option></select>}<span className="avatar">GG</span></div>
+        <div className="headright"><span className="demoBadge">{apiBase ? 'CONNECTED DEMO' : 'SAMPLE DATA'}</span><select className="languageSelect" aria-label="Language" value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">EN</option><option value="es">ES</option></select>{session ? <><span className="sessionUser">{session.name}<small>{session.role.replace('_', ' ')}</small></span><button className="btn compact" onClick={async () => { await api('/api/auth/logout', { method: 'POST' }); setSession(null); }}>Sign out</button></> : <select aria-label="Demo view mode" value={state.viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}><option value="manager">Manager demo</option><option value="corporate">Corporate demo</option></select>}<span className="avatar">GG</span></div>
       </header>
       <main>{content[route]}<OliviaOne module={route} state={state} /></main>
       <footer>Interactive demo · Fictional data · No live weather, POS, inventory sync, supplier connection or real order sending</footer>
