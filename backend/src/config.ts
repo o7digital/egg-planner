@@ -11,6 +11,9 @@ const schema = z.object({
   HF_TOKEN: z.string().optional(),
   HF_MODEL: z.string().default('Qwen/Qwen3-32B'),
   HF_API_URL: z.string().url().default('https://router.huggingface.co/v1/chat/completions'),
+  CLERK_SECRET_KEY: z.string().optional(),
+  CLERK_PUBLISHABLE_KEY: z.string().optional(),
+  CLERK_AUTHORIZED_PARTIES: z.string().optional(),
   PORT: z.coerce.number().positive().default(3000),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });

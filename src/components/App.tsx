@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { ClerkProvider, SignIn, UserButton, useAuth, useUser } from '@clerk/react';
 import {
   ArrowDown, ArrowRight, ArrowUp, Boxes, BrainCircuit, Building2, CalendarDays,
   Check, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, CloudSun,
@@ -16,7 +17,7 @@ import type {
   DemoOrder, FrozenProduct, PlannerState, Product, ProductNeedsStatus, SalesForecastStatus,
   SupplierOrderStatus, ViewMode, Weather,
 } from '../lib/types';
-import { api, apiBase, type SessionUser } from '../lib/api';
+import { api, apiBase, setAuthTokenProvider, type SessionUser } from '../lib/api';
 
 const pages = [
   ['dashboard', 'Dashboard', LayoutDashboard],
@@ -34,6 +35,7 @@ const pages = [
 type Route = typeof pages[number][0];
 type ScreenProps = { state: PlannerState; update: (patch: Partial<PlannerState>) => void };
 type Language = 'en' | 'es';
+const clerkPublishableKey = import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined;
 
 const LANGUAGE_STORAGE_KEY = 'gallo-giro-ops-planner:language';
 const spanishText: Record<string, string> = {
@@ -206,13 +208,29 @@ function useLocalizedInterface(language: Language) {
 }
 
 export default function App() {
+  if (!clerkPublishableKey) return apiBase ? <div className="authPage"><div className="loginCard"><div className="eyebrow">CLERK SETUP REQUIRED</div><h1>Authentication is being configured.</h1><p className="sub">Add PUBLIC_CLERK_PUBLISHABLE_KEY in Vercel to enable secure sign-in.</p></div></div> : <PlannerApp />;
+  return <ClerkProvider publishableKey={clerkPublishableKey} afterSignOutUrl="/"><ClerkGate /></ClerkProvider>;
+}
+
+function ClerkGate() {
+  const { isLoaded, isSignedIn, getToken } = useAuth();
+  const { user } = useUser();
+  useEffect(() => { setAuthTokenProvider(isSignedIn ? getToken : undefined); return () => setAuthTokenProvider(undefined); }, [getToken, isSignedIn]);
+  if (!isLoaded) return <div className="authPage"><p>Loading secure workspace…</p></div>;
+  if (!isSignedIn || !user) return <div className="authPage"><div className="clerkLogin"><div className="brand loginBrand"><img src="/brand/el-gallo-giro-logo.png" alt="El Gallo Giro" /><span>OPERATIONS PLANNER</span></div><SignIn routing="hash" /></div></div>;
+  const email = user.primaryEmailAddress?.emailAddress ?? '';
+  const role = (user.publicMetadata.role === 'manager' || user.publicMetadata.role === 'admin' || user.publicMetadata.role === 'super_admin') ? user.publicMetadata.role : 'manager';
+  return <PlannerApp clerkSession={{ user: { id: user.id, email, name: user.fullName ?? email, role, restaurants: [] } }} />;
+}
+
+function PlannerApp({ clerkSession }: { clerkSession?: { user: SessionUser } }) {
   const [state, setState] = useState<PlannerState>(initialState);
   const [ready, setReady] = useState(false);
   const [route, setRoute] = useState<Route>('dashboard');
   const [reviewOpen, setReviewOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [notice, setNotice] = useState('');
-  const [session, setSession] = useState<SessionUser | null | undefined>(undefined);
+  const session = clerkSession?.user ?? null;
   const [language, setLanguage] = useState<Language>('en');
   useLocalizedInterface(language);
 
@@ -228,10 +246,6 @@ export default function App() {
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
   useEffect(() => { if (ready) window.localStorage.setItem(LANGUAGE_STORAGE_KEY, language); }, [language, ready]);
-  useEffect(() => {
-    if (!apiBase) { setSession(null); return; }
-    api<{ user: SessionUser }>('/api/auth/me').then(({ user }) => setSession(user)).catch(() => setSession(null));
-  }, []);
   useEffect(() => { if (ready) saveState(state); }, [state, ready]);
   useEffect(() => {
     if (!notice) return;
@@ -292,8 +306,6 @@ export default function App() {
     settings: <Rules {...shared} requestReset={() => setResetOpen(true)} />,
   };
 
-  if (apiBase && session === undefined) return <div className="authPage"><p>Loading secure workspace…</p></div>;
-  if (apiBase && !session) return <Login onLogin={setSession} />;
   return <div className="shell" data-language={language}>
     <aside className="sidebar">
       <div className="brandPanel"><a className="brand" href="#dashboard"><img src="/brand/el-gallo-giro-logo.png" alt="El Gallo Giro" /><span>OPERATIONS PLANNER</span></a></div>
@@ -308,7 +320,7 @@ export default function App() {
           <label><CalendarDays /> Week starting<input type="date" value={state.date} onChange={(event) => event.target.value && update({ date: event.target.value })} /></label>
           <span className="weekHorizon">7-day planning window</span>
         </div>
-        <div className="headright"><span className="demoBadge">{apiBase ? 'CONNECTED DEMO' : 'SAMPLE DATA'}</span><select className="languageSelect" aria-label="Language" value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">EN</option><option value="es">ES</option></select>{session ? <><span className="sessionUser">{session.name}<small>{session.role.replace('_', ' ')}</small></span><button className="btn compact" onClick={async () => { await api('/api/auth/logout', { method: 'POST' }); setSession(null); }}>Sign out</button></> : <select aria-label="Demo view mode" value={state.viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}><option value="manager">Manager demo</option><option value="corporate">Corporate demo</option></select>}<span className="avatar">GG</span></div>
+        <div className="headright"><span className="demoBadge">{apiBase ? 'CONNECTED DEMO' : 'SAMPLE DATA'}</span><select className="languageSelect" aria-label="Language" value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">EN</option><option value="es">ES</option></select>{session ? <><span className="sessionUser">{session.name}<small>{session.role.replace('_', ' ')}</small></span><UserButton /></> : <select aria-label="Demo view mode" value={state.viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}><option value="manager">Manager demo</option><option value="corporate">Corporate demo</option></select>}<span className="avatar">GG</span></div>
       </header>
       <main>{content[route]}</main>
       <footer>Interactive demo · Fictional data · No live weather, POS, inventory sync, supplier connection or real order sending</footer>
@@ -317,20 +329,6 @@ export default function App() {
     {resetOpen && <Modal close={() => setResetOpen(false)}><div className="eyebrow">RESET DEMO</div><h2>Reset all local data?</h2><p>This removes manager forecasts, stock edits, order adjustments and demo history stored in this browser.</p><div className="dialogButtons"><button className="btn" onClick={() => setResetOpen(false)}>Cancel</button><button className="btn danger" onClick={reset}>Reset demo data</button></div></Modal>}
     {notice && <div className="toast" role="status">{notice}</div>}
   </div>;
-}
-
-function Login({ onLogin }: { onLogin: (user: SessionUser) => void }) {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [busy, setBusy] = useState(false);
-  const submit = async (event: { preventDefault: () => void }) => {
-    event.preventDefault(); setBusy(true); setError('');
-    try { await api('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) }); onLogin((await api<{ user: SessionUser }>('/api/auth/me')).user); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : 'Unable to sign in'); }
-    finally { setBusy(false); }
-  };
-  return <div className="authPage"><form className="loginCard" onSubmit={submit}><div className="brand loginBrand"><img src="/brand/el-gallo-giro-logo.png" alt="El Gallo Giro" /><span>OPERATIONS PLANNER</span></div><div className="eyebrow">SECURE DEMO</div><h1>Welcome back.</h1><p className="sub">Sign in with your assigned manager or corporate account.</p>{error && <div className="loginError" role="alert">{error}</div>}<label>Email<input type="email" required value={email} onChange={(event) => setEmail(event.target.value)} /></label><label>Password<input type="password" minLength={8} required value={password} onChange={(event) => setPassword(event.target.value)} /></label><button className="btn primary" disabled={busy}>{busy ? 'Signing in…' : 'Sign in'}</button></form></div>;
 }
 
 function ScreenTitle({ state, update, eyebrow = 'RESTAURANT OPERATIONS', title, subtitle, controls = true }: ScreenProps & { eyebrow?: string; title: string; subtitle: string; controls?: boolean }) {
