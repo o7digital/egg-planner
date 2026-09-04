@@ -1,7 +1,9 @@
 import { initialState } from './data';
 import type { PlannerState } from './types';
 
-export const STORAGE_KEY = 'gallo-giro-ops-planner:v2';
+// Bump this key whenever the persisted PlannerState shape changes. Reusing an
+// older key can hydrate an incompatible demo state and crash the client UI.
+export const STORAGE_KEY = 'gallo-giro-ops-planner:v3';
 
 export function loadState(): PlannerState {
   if (typeof window === 'undefined') return initialState;
