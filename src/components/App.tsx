@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { ClerkProvider, SignIn, UserButton, useAuth, useUser } from '@clerk/react';
 import {
   ArrowDown, ArrowRight, ArrowUp, Boxes, BrainCircuit, Building2, CalendarDays,
   Check, ChevronLeft, ChevronRight, ClipboardCheck, ClipboardList, CloudSun,
@@ -17,7 +16,7 @@ import type {
   DemoOrder, FrozenProduct, PlannerState, Product, ProductNeedsStatus, SalesForecastStatus,
   SupplierOrderStatus, ViewMode, Weather,
 } from '../lib/types';
-import { api, apiBase, setAuthTokenProvider, type SessionUser } from '../lib/api';
+import { api, apiBase } from '../lib/api';
 
 const pages = [
   ['dashboard', 'Dashboard', LayoutDashboard],
@@ -35,7 +34,6 @@ const pages = [
 type Route = typeof pages[number][0];
 type ScreenProps = { state: PlannerState; update: (patch: Partial<PlannerState>) => void };
 type Language = 'en' | 'es';
-const clerkPublishableKey = import.meta.env.PUBLIC_CLERK_PUBLISHABLE_KEY as string | undefined;
 
 const LANGUAGE_STORAGE_KEY = 'gallo-giro-ops-planner:language';
 const spanishText: Record<string, string> = {
@@ -208,29 +206,16 @@ function useLocalizedInterface(language: Language) {
 }
 
 export default function App() {
-  if (!clerkPublishableKey) return apiBase ? <div className="authPage"><div className="loginCard"><div className="eyebrow">CLERK SETUP REQUIRED</div><h1>Authentication is being configured.</h1><p className="sub">Add PUBLIC_CLERK_PUBLISHABLE_KEY in Vercel to enable secure sign-in.</p></div></div> : <PlannerApp />;
-  return <ClerkProvider publishableKey={clerkPublishableKey} afterSignOutUrl="/"><ClerkGate /></ClerkProvider>;
+  return <PlannerApp />;
 }
 
-function ClerkGate() {
-  const { isLoaded, isSignedIn, getToken } = useAuth();
-  const { user } = useUser();
-  useEffect(() => { setAuthTokenProvider(isSignedIn ? getToken : undefined); return () => setAuthTokenProvider(undefined); }, [getToken, isSignedIn]);
-  if (!isLoaded) return <div className="authPage"><p>Loading secure workspace…</p></div>;
-  if (!isSignedIn || !user) return <div className="authPage"><div className="clerkLogin"><div className="brand loginBrand"><img src="/brand/el-gallo-giro-logo.png" alt="El Gallo Giro" /><span>OPERATIONS PLANNER</span></div><SignIn routing="hash" /></div></div>;
-  const email = user.primaryEmailAddress?.emailAddress ?? '';
-  const role = (user.publicMetadata.role === 'manager' || user.publicMetadata.role === 'admin' || user.publicMetadata.role === 'super_admin') ? user.publicMetadata.role : 'manager';
-  return <PlannerApp clerkSession={{ user: { id: user.id, email, name: user.fullName ?? email, role, restaurants: [] } }} />;
-}
-
-function PlannerApp({ clerkSession }: { clerkSession?: { user: SessionUser } }) {
+function PlannerApp() {
   const [state, setState] = useState<PlannerState>(initialState);
   const [ready, setReady] = useState(false);
   const [route, setRoute] = useState<Route>('dashboard');
   const [reviewOpen, setReviewOpen] = useState(false);
   const [resetOpen, setResetOpen] = useState(false);
   const [notice, setNotice] = useState('');
-  const session = clerkSession?.user ?? null;
   const [language, setLanguage] = useState<Language>('en');
   useLocalizedInterface(language);
 
@@ -320,7 +305,7 @@ function PlannerApp({ clerkSession }: { clerkSession?: { user: SessionUser } }) 
           <label><CalendarDays /> Week starting<input type="date" value={state.date} onChange={(event) => event.target.value && update({ date: event.target.value })} /></label>
           <span className="weekHorizon">7-day planning window</span>
         </div>
-        <div className="headright"><span className="demoBadge">{apiBase ? 'CONNECTED DEMO' : 'SAMPLE DATA'}</span><select className="languageSelect" aria-label="Language" value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">EN</option><option value="es">ES</option></select>{session ? <><span className="sessionUser">{session.name}<small>{session.role.replace('_', ' ')}</small></span><UserButton /></> : <select aria-label="Demo view mode" value={state.viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}><option value="manager">Manager demo</option><option value="corporate">Corporate demo</option></select>}<span className="avatar">GG</span></div>
+        <div className="headright"><span className="demoBadge">{apiBase ? 'CONNECTED DEMO' : 'SAMPLE DATA'}</span><select className="languageSelect" aria-label="Language" value={language} onChange={(event) => setLanguage(event.target.value as Language)}><option value="en">EN</option><option value="es">ES</option></select><select aria-label="Demo view mode" value={state.viewMode} onChange={(event) => setViewMode(event.target.value as ViewMode)}><option value="manager">Manager demo</option><option value="corporate">Corporate demo</option></select><span className="avatar">GG</span></div>
       </header>
       <main>{content[route]}</main>
       <footer>Interactive demo · Fictional data · No live weather, POS, inventory sync, supplier connection or real order sending</footer>
