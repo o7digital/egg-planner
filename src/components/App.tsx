@@ -5,15 +5,15 @@ import {
   Download, History, Info, LayoutDashboard, LockKeyhole, MapPin, PackageOpen,
   RotateCcw, Settings2, Snowflake, Sun, Truck, X,
 } from 'lucide-react';
-import { artimexProductionInputs, initialState, locations, products } from '../lib/data';
+import { artimexProductionInputs, demoRestaurant365Feed, frozenProducts, initialState, inventoryMappings, locations, products } from '../lib/data';
 import {
   artimexConsolidation, calculateArtimexProduction, calculateRestaurantOrder, forecastKey,
   keyFor, manualKeyFor, orderTotal, planKey, plannedQuantity,
-  productNeed, replaceOrder, restaurantOrderValidation, stockOnHand, weeklyForecast,
+  calculateFrozenBreadNeed, frozenInventoryFor, frozenKeyFor, frozenManualKeyFor, frozenPlannedCases, frozenDemandTime, productNeed, replaceOrder, restaurantOrderValidation, stockOnHand, weeklyForecast,
 } from '../lib/calculations';
 import { clearState, loadState, saveState } from '../lib/storage';
 import type {
-  DemoOrder, PlannerState, Product, ProductNeedsStatus, SalesForecastStatus,
+  DemoOrder, FrozenProduct, PlannerState, Product, ProductNeedsStatus, SalesForecastStatus,
   SupplierOrderStatus, ViewMode, Weather,
 } from '../lib/types';
 import { api, apiBase, type SessionUser } from '../lib/api';
@@ -24,6 +24,7 @@ const pages = [
   ['analytics', 'Analytics', BrainCircuit],
   ['orders', 'Supplier Orders', ClipboardList],
   ['inventory', 'Inventory', Boxes],
+  ['frozen-bread', 'Frozen Bread', Snowflake],
   ['suppliers', 'Suppliers', Truck],
   ['corporate', 'Corporate Overview', Building2],
   ['consolidation', 'Artimex Consolidation', PackageOpen],
@@ -39,6 +40,13 @@ const spanishText: Record<string, string> = {
   'Dashboard': 'Panel', 'Sales Forecast': 'Pronóstico de ventas', 'Analytics': 'Análisis', 'Supplier Orders': 'Pedidos a proveedores',
   'Inventory': 'Inventario', 'Suppliers': 'Proveedores', 'Corporate Overview': 'Vista corporativa', 'Artimex Consolidation': 'Consolidación Artimex',
   'Order History': 'Historial de pedidos', 'Rules & Settings': 'Reglas y configuración', 'WORKSPACE': 'ESPACIO DE TRABAJO',
+  'Frozen Bread': 'Pan congelado', 'Frozen Bread Planner': 'Planificador de pan congelado', 'FROZEN BREAD · DEMO MODULE': 'PAN CONGELADO · MÓDULO DEMO',
+  'Plan thawing, protect service availability and prepare Artimex replenishment.': 'Planifica la descongelación, protege la disponibilidad de servicio y prepara la reposición de Artimex.',
+  'Sales forecast validation required': 'Se requiere validar el pronóstico de ventas', 'Sales forecast must be validated before frozen bread planning can be calculated.': 'El pronóstico de ventas debe validarse antes de calcular la planificación de pan congelado.',
+  'Go to Sales Forecast': 'Ir al pronóstico de ventas',
+  'Frozen Stock': 'Stock congelado', 'Currently Thawing': 'En descongelación', 'Tomorrow Expected Need': 'Necesidad esperada mañana', 'Shortage Risk': 'Riesgo de falta',
+  'Frozen inventory and usable supply': 'Inventario congelado y suministro utilizable', 'TOMORROW THAW PLAN': 'PLAN DE DESCONGELACIÓN DE MAÑANA', 'Move product at the right time': 'Mueve producto en el momento correcto', 'Mark as Thawing': 'Marcar como descongelando',
+  'ARTIMEX REPLENISHMENT': 'REPOSICIÓN ARTIMEX', 'Suggested replenishment order': 'Pedido de reposición sugerido', 'Validate Artimex Order': 'Validar pedido Artimex', 'Restaurant365': 'Restaurant365', 'DEMO MODE': 'MODO DEMO',
   'Independent demo workspace': 'Espacio de demostración independiente', 'From forecast to the next delivery.': 'Del pronóstico a la próxima entrega.',
   'Demo mode · no real permissions': 'Modo demo · sin permisos reales', 'Restaurant': 'Restaurante', 'RESTAURANT': 'RESTAURANTE', 'Week starting': 'Semana que inicia',
   '7-day planning window': 'Ventana de planificación de 7 días', 'SAMPLE DATA': 'DATOS DE MUESTRA', 'CONNECTED DEMO': 'DEMO CONECTADA',
@@ -276,6 +284,7 @@ export default function App() {
     analytics: <Analytics state={state} update={update} />,
     orders: <Orders {...shared} openReview={() => setReviewOpen(true)} />,
     inventory: <Inventory state={state} update={update} />,
+    'frozen-bread': <FrozenBreadPlanner {...shared} />,
     suppliers: <Suppliers state={state} />,
     corporate: <Corporate state={state} update={update} />,
     consolidation: <Consolidation {...shared} />,
@@ -370,6 +379,7 @@ function Dashboard({ state, update, notify, openReview }: ScreenProps & { notify
     <WorkflowSteps state={state} />
     <PlanningSummary state={state} />
     <DemoNotice />
+    <FrozenBreadDashboardCard state={state} />
     <OliviaBrief module="dashboard" state={state} compact />
     <WeatherStrip state={state} />
     <ForecastPanel state={state} update={update} notify={notify} />
@@ -377,6 +387,14 @@ function Dashboard({ state, update, notify, openReview }: ScreenProps & { notify
     {statuses.needs === 'calculated' && statuses.forecast === 'validated' ? <SupplierOrderGroups state={state} update={update} openReview={openReview} /> : <LockedStep number={4} title="Prepare supplier orders" text="Product needs must be calculated from a validated forecast before order quantities are shown." />}
     {statuses.order === 'validated' ? <section className="workflowSuccess"><Check /><div><b>Order included in Artimex consolidation</b><span>The restaurant orders product. Artimex separately plans production from all validated restaurant orders.</span></div><a className="btn" href="#consolidation">View consolidation <ArrowRight /></a></section> : <LockedStep number={5} title="Artimex production" text="Only validated restaurant orders enter the separate corporate production plan." compact />}
   </>;
+}
+
+function FrozenBreadDashboardCard({ state }: { state: PlannerState }) {
+  const validated = state.forecastStatuses[planKey(state.date, state.locationId)] === 'validated';
+  const needs = frozenProducts.map((product) => calculateFrozenBreadNeed(state, product));
+  const need = needs.reduce((sum, item) => sum + item.expectedNeed, 0); const shortage = needs.reduce((sum, item) => sum + item.shortage, 0);
+  const thaw = frozenProducts.reduce((sum, product) => sum + frozenInventoryFor(state, product.id).thawingQty, 0); const cases = needs.reduce((sum, item) => sum + item.suggestedCases, 0);
+  return <section className="frozenDashboardCard"><div><span className="eyebrow">FROZEN BREAD · DEMO</span><h2>Tomorrow’s thaw and replenishment</h2><p>{validated ? 'Connected to the validated sales forecast.' : 'Validate sales to calculate the frozen bread plan.'}</p></div><div><span>Tomorrow need<b>{validated ? `${number(need)} units` : 'Locked'}</b></span><span>To thaw<b>{validated ? `${number(thaw)} units` : '—'}</b></span><span>Shortage<b className={shortage ? 'impactNegative' : ''}>{validated ? `${number(shortage)} units` : '—'}</b></span><span>Artimex suggested<b>{validated ? `${cases} cases` : '—'}</b></span></div><a className="btn primary" href="#frozen-bread">Open Frozen Bread Plan <ChevronRight /></a></section>;
 }
 
 function PlanningSummary({ state }: { state: PlannerState }) {
@@ -528,6 +546,37 @@ function Inventory({ state, update }: ScreenProps) {
   return <><ScreenTitle state={state} update={update} title="Inventory Inputs" subtitle="Count stock in product units; the validated workflow converts the resulting need into full supplier cases." /><DemoNotice /><OliviaBrief module="inventory" state={state} compact /><section className="card"><div className="cardHead"><div><h2>Stock on hand</h2><p>Changing inventory after calculation requires product needs to be recalculated.</p></div><span className="pill">SAVED LOCALLY</span></div><div className="tableWrap"><table className="responsiveTable"><thead><tr><th>Product</th><th>Supplier</th><th>On hand</th><th>Confirmed incoming</th><th>Planning status</th></tr></thead><tbody>{products.map((product) => <tr key={product.id}><td data-label="Product"><b>{product.name}</b><small>{product.unitsPerCase} {product.unitLabel}/case</small></td><td data-label="Supplier">{product.supplier}</td><td data-label="On hand"><input className="numberInput" type="number" min="0" value={stockOnHand(state, product)} onChange={(event) => setStock(product, Number(event.target.value))} /> {product.unitLabel}</td><td data-label="Confirmed incoming">{product.incomingUnits} {product.unitLabel}</td><td data-label="Planning status"><StatusBadge status={statuses.needs.replaceAll('-', ' ')} /></td></tr>)}</tbody></table></div></section></>;
 }
 
+function FrozenBreadPlanner({ state, update, notify }: ScreenProps & { notify: (text: string) => void }) {
+  const validated = state.forecastStatuses[planKey(state.date, state.locationId)] === 'validated';
+  const rows = frozenProducts.map((product) => ({ product, inventory: frozenInventoryFor(state, product.id), need: calculateFrozenBreadNeed(state, product) }));
+  const total = (field: 'frozenQty' | 'thawingQty' | 'readyQty') => rows.reduce((sum, row) => sum + row.inventory[field], 0);
+  const expected = rows.reduce((sum, row) => sum + row.need.expectedNeed, 0);
+  const shortage = rows.reduce((sum, row) => sum + row.need.shortage, 0);
+  const plannedBatches = state.thawBatches.filter((batch) => batch.locationId === state.locationId && batch.status === 'planned');
+  const markThawing = (id: string) => {
+    const batch = state.thawBatches.find((item) => item.id === id); if (!batch) return;
+    const key = frozenKeyFor(batch.locationId, batch.productId); const inventory = state.frozenInventories[key];
+    const moved = Math.min(batch.quantity, inventory.frozenQty);
+    update({ frozenInventories: { ...state.frozenInventories, [key]: { ...inventory, frozenQty: inventory.frozenQty - moved, thawingQty: inventory.thawingQty + moved } }, thawBatches: state.thawBatches.map((item) => item.id === id ? { ...item, quantity: moved, status: 'thawing' } : item) });
+    notify(`${moved} units moved from Frozen to Thawing. Olivia One updated the readiness timing.`);
+  };
+  const setOrder = (product: FrozenProduct, quantity: number) => update({ frozenManualQuantities: { ...state.frozenManualQuantities, [frozenManualKeyFor(state.date, state.locationId, product.id)]: Math.max(0, Math.round(quantity || 0)) } });
+  const validateOrder = () => {
+    const quantities = Object.fromEntries(frozenProducts.map((product) => [product.id, frozenPlannedCases(state, product)]));
+    update({ frozenOrders: [...state.frozenOrders.filter((order) => !(order.locationId === state.locationId && order.date === state.date)), { locationId: state.locationId, date: state.date, quantities, status: 'validated', confirmedAt: new Date().toISOString() }] });
+    notify('Artimex replenishment validated and included in the Frozen Bread demo consolidation. Nothing was transmitted.');
+  };
+  return <><ScreenTitle state={state} update={update} eyebrow="FROZEN BREAD · DEMO MODULE" title="Frozen Bread Planner" subtitle="Plan thawing, protect service availability and prepare Artimex replenishment." /><DemoNotice />
+    {!validated ? <section className="lockedStep" aria-disabled="true"><span><LockKeyhole /></span><div><small>STEP 1 · PENDING</small><h2>Sales forecast validation required</h2><p>Sales forecast must be validated before frozen bread planning can be calculated.</p><a className="btn primary" href="#forecast">Go to Sales Forecast <ChevronRight /></a></div></section> : <>
+      <div className="frozenKpis"><SummaryItem label="Frozen Stock" value={`${number(total('frozenQty'))} units`} /><SummaryItem label="Currently Thawing" value={`${number(total('thawingQty'))} units`} /><SummaryItem label="Tomorrow Expected Need" value={`${number(expected)} units`} /><SummaryItem label="Shortage Risk" value={`${number(shortage)} units`} tone={shortage > 0 ? 'negative' : 'positive'} /></div>
+      <OliviaBrief module="frozen-bread" state={state} compact />
+      <section className="card frozenTable"><div className="cardHead"><div><span className="eyebrow">RESTAURANT365 DEMO FEED</span><h2>Frozen inventory and usable supply</h2><p>Frozen units are excluded when there is not enough time to complete the 8-hour thaw before demand.</p></div><span className="pill amber">DEMO DATA</span></div><div className="tableWrap"><table className="responsiveTable"><thead><tr><th>Product</th><th>Frozen</th><th>Thawing</th><th>Ready</th><th>Incoming</th><th>Expected need</th><th>Projected available</th><th>Shortage / surplus</th><th>Status</th></tr></thead><tbody>{rows.map(({ product, inventory, need }) => <tr key={product.id}><td data-label="Product"><b>{product.name}</b><small>{product.thawHours}-hour thaw · {product.unitsPerCase}/case</small></td><td data-label="Frozen">{number(inventory.frozenQty)}</td><td data-label="Thawing">{number(inventory.thawingQty)}</td><td data-label="Ready">{number(inventory.readyQty)}</td><td data-label="Incoming">{number(inventory.incomingQty)}</td><td data-label="Expected need"><b>{number(need.expectedNeed)}</b><small>{new Date(frozenDemandTime(state.date, product)).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</small></td><td data-label="Projected available">{number(need.projectedAvailable)}<small>Frozen usable: {need.frozenUsable}</small></td><td data-label="Shortage / surplus" className={need.shortage ? 'impactNegative' : 'impactPositive'}><b>{need.shortage ? `−${number(need.shortage)}` : `+${number(need.projectedAvailable - need.expectedNeed - need.safetyStock)}`}</b></td><td data-label="Status"><StatusBadge status={need.status} /></td></tr>)}</tbody></table></div></section>
+      <section className="card thawPlan"><div className="cardHead"><div><span className="eyebrow">TOMORROW THAW PLAN</span><h2>Move product at the right time</h2><p>Each batch becomes usable only after its product-specific thaw duration.</p></div><span className="pill">8-HOUR RULE</span></div>{plannedBatches.map((batch) => { const product = frozenProducts.find((item) => item.id === batch.productId)!; return <div className="thawLine" key={batch.id}><b>{new Date(batch.thawStart).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</b><span><strong>{product.name}</strong><small>Move {batch.quantity} units Frozen → Thawing · ready {new Date(batch.readyAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}</small></span><button className="btn primary" onClick={() => markThawing(batch.id)}>Mark as Thawing</button></div>; })}{!plannedBatches.length && <p className="emptyInline">All demo thaw batches have been started.</p>}</section>
+      <section className="card replenishment"><div className="cardHead"><div><span className="eyebrow">ARTIMEX REPLENISHMENT</span><h2>Suggested replenishment order</h2><p>Manager quantities round shortages up to complete Artimex cases. No order is sent in this demo.</p></div><StatusBadge status={state.frozenOrders.some((order) => order.locationId === state.locationId && order.date === state.date) ? 'validated' : 'suggested'} /></div><div className="tableWrap"><table className="responsiveTable"><thead><tr><th>Product</th><th>Shortage</th><th>Case size</th><th>Suggested</th><th>Manager order</th><th>Why?</th></tr></thead><tbody>{rows.filter(({ need }) => need.shortage > 0).map(({ product, need }) => { const manager = frozenPlannedCases(state, product); return <tr key={product.id}><td data-label="Product"><b>{product.name}</b></td><td data-label="Shortage">{number(need.shortage)} units</td><td data-label="Case size">{product.unitsPerCase} units</td><td data-label="Suggested"><b>{need.suggestedCases} cases</b></td><td data-label="Manager order"><input className="numberInput" aria-label={`Frozen order quantity ${product.name}`} type="number" min="0" value={manager} onChange={(event) => setOrder(product, Number(event.target.value))} /> cases</td><td data-label="Why?"><details className="calcDetails"><summary><Info /> Why {need.suggestedCases} cases?</summary><div><span>Tomorrow demand <b>{need.expectedNeed}</b></span><span>Safety stock <b>+{need.safetyStock}</b></span><span>Ready <b>−{need.readyQty}</b></span><span>Thawing ready in time <b>−{need.thawingUsable}</b></span><span>Frozen usable in time <b>−{need.frozenUsable}</b></span><span>Incoming in time <b>−{need.incomingUsable}</b></span><span className="calcTotal">Shortage <b>{need.shortage}</b></span><span>Case size <b>{product.unitsPerCase}</b></span><span className="calcOrder">ORDER <b>{need.suggestedCases} CASES</b></span></div></details></td></tr>; })}</tbody></table></div><div className="cardFoot"><span>Validated replenishment is included in Artimex production planning as a Frozen Planner source.</span><button className="btn primary" onClick={validateOrder}>Validate Artimex Order <ChevronRight /></button></div></section>
+      <section className="card r365Feed"><div className="cardHead"><div><span className="eyebrow">RESTAURANT365 INVENTORY FEED</span><h2>Demo adapter and product mapping</h2><p>Simulated external data, structured for a future provider replacement.</p></div><span className="pill amber">DEMO MODE</span></div><div className="tableWrap"><table className="responsiveTable"><thead><tr><th>SKU</th><th>Product</th><th>On hand</th><th>Last count</th><th>Received</th><th>Waste</th><th>Last updated</th></tr></thead><tbody>{demoRestaurant365Feed.filter((item) => item.locationId === state.locationId).map((item) => <tr key={item.sku}><td data-label="SKU">{item.sku}</td><td data-label="Product">{item.productName}</td><td data-label="On hand">{item.onHand}</td><td data-label="Last count">{item.lastCount}</td><td data-label="Received">{item.received}</td><td data-label="Waste">{item.waste}</td><td data-label="Last updated">{item.lastUpdated}</td></tr>)}</tbody></table></div><div className="mappingList">{inventoryMappings.map((mapping) => <span key={mapping.r365Sku}><b>{mapping.r365Sku}</b> → {frozenProducts.find((product) => product.id === mapping.frozenProductId)?.name} → {mapping.artimexProductName}</span>)}</div></section>
+    </>}</>;
+}
+
 function Suppliers({ state }: { state: PlannerState }) {
   const groups = [...new Set(products.map((product) => product.supplier))];
   return <><ScreenTitle state={state} update={() => undefined} title="Your Supply Network" subtitle="Supplier packaging is configured; delivery calendars still require confirmation." controls={false} /><DemoNotice /><div className="supplierGrid">{groups.map((supplier) => <section className="card supplierCard" key={supplier}><span className="productIcon"><Truck /></span><h2>{supplier}</h2><p>{products.filter((product) => product.supplier === supplier).map((product) => product.name.split(' · ')[0]).join(', ')}.</p><span className="pill">{products.filter((product) => product.supplier === supplier).length} demo products</span><p className="tiny">Delivery schedule and cutoff: to configure.</p><a className="btn" href={supplier === 'Artimex' ? '#consolidation' : '#orders'}>View planning <ChevronRight /></a></section>)}</div></>;
@@ -577,7 +626,7 @@ function Rules({ state, update, requestReset, notify }: ScreenProps & { requestR
     update({ veryHotAdjustment: draft.veryHot, hotAdjustment: draft.hot, coldAdjustment: draft.cold });
     notify('Current business rules saved. Unvalidated demo forecasts now use the new adjustments.');
   };
-  return <><ScreenTitle state={state} update={update} title="Rules & Settings" subtitle="Configure Charles’s provisional weather assumptions. These are business rules, not trained predictions." controls={false} /><DemoNotice /><form className="card padded" onSubmit={submit}><span className="eyebrow">CURRENT BUSINESS RULE</span><h2>Weather adjustment</h2><p className="sub">Replace these sample rules when real restaurant weather elasticity is available.</p><div className="formGrid"><label>Very hot adjustment (%)<input type="number" min="-90" max="0" required value={draft.veryHot} onChange={(event) => setDraft({ ...draft, veryHot: Number(event.target.value) })} /></label><label>Hot adjustment (%)<input type="number" min="-90" max="0" required value={draft.hot} onChange={(event) => setDraft({ ...draft, hot: Number(event.target.value) })} /></label><label>Cold adjustment (%)<input type="number" min="0" max="100" required value={draft.cold} onChange={(event) => setDraft({ ...draft, cold: Number(event.target.value) })} /></label></div><div className="formula"><b>Forecast Sales</b> = Historical Comparable Sales × (1 + Weather Adjustment)<br /><b>Product Need</b> = max(0, Expected Consumption + Safety Stock − On Hand − Confirmed Incoming)<br /><b>Cases</b> = ceil(Net Requirement ÷ Units Per Case)</div><div className="cardFoot"><span>Mild weather remains 0% · demo configuration</span><button className="btn primary" type="submit">Save business rules</button></div></form><section className="card resetCard"><div><h2>Local demo data</h2><p>Clear manager forecasts, stock edits, order adjustments and history.</p></div><button className="btn dangerOutline" onClick={requestReset}><RotateCcw /> Reset demo data</button></section></>;
+  return <><ScreenTitle state={state} update={update} title="Rules & Settings" subtitle="Configure Charles’s provisional weather assumptions. These are business rules, not trained predictions." controls={false} /><DemoNotice /><form className="card padded" onSubmit={submit}><span className="eyebrow">CURRENT BUSINESS RULE</span><h2>Weather adjustment</h2><p className="sub">Replace these sample rules when real restaurant weather elasticity is available.</p><div className="formGrid"><label>Very hot adjustment (%)<input type="number" min="-90" max="0" required value={draft.veryHot} onChange={(event) => setDraft({ ...draft, veryHot: Number(event.target.value) })} /></label><label>Hot adjustment (%)<input type="number" min="-90" max="0" required value={draft.hot} onChange={(event) => setDraft({ ...draft, hot: Number(event.target.value) })} /></label><label>Cold adjustment (%)<input type="number" min="0" max="100" required value={draft.cold} onChange={(event) => setDraft({ ...draft, cold: Number(event.target.value) })} /></label></div><div className="formula"><b>Forecast Sales</b> = Historical Comparable Sales × (1 + Weather Adjustment)<br /><b>Product Need</b> = max(0, Expected Consumption + Safety Stock − On Hand − Confirmed Incoming)<br /><b>Cases</b> = ceil(Net Requirement ÷ Units Per Case)</div><div className="cardFoot"><span>Mild weather remains 0% · demo configuration</span><button className="btn primary" type="submit">Save business rules</button></div></form><section className="card integrationCard"><div><span className="eyebrow">INTEGRATIONS</span><h2>Restaurant365</h2><p>Connection: <b>DEMO MODE</b> · Simulated inventory feed · Last sync: 10:42 AM</p><small>10 locations · 6 mapped frozen bread products · no live Restaurant365 connection</small></div><a className="btn" href="#frozen-bread">View Integration <ChevronRight /></a></section><section className="card resetCard"><div><h2>Local demo data</h2><p>Clear manager forecasts, stock edits, order adjustments and history.</p></div><button className="btn dangerOutline" onClick={requestReset}><RotateCcw /> Reset demo data</button></section></>;
 }
 
 function OrderReview({ state, close, confirm }: { state: PlannerState; close: () => void; confirm: () => void }) {
@@ -590,6 +639,7 @@ const moduleGuidance: Record<Route, string> = {
   analytics: 'Use the forecast pattern as context; downstream operational quantities still require validation.',
   orders: 'Check every units-to-cases explanation before approving supplier quantities.',
   inventory: 'Record stock in product units so case conversion remains transparent.',
+  'frozen-bread': 'Prioritize the batches that need an eight-hour thaw before the next service window, then validate only the replenishment cases still required.',
   suppliers: 'Configure delivery calendars before expanding the requirement horizon beyond the selected day.',
   corporate: 'Restaurant orders and Artimex production are separate decisions.',
   consolidation: 'Only validated restaurant orders belong in Artimex demand.',

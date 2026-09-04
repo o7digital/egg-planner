@@ -75,6 +75,7 @@ describe('Canoga Park sequential workflow', () => {
       ['analytics', 'Forecast Analytics'],
       ['orders', 'Product Needs & Supplier Orders'],
       ['inventory', 'Inventory Inputs'],
+      ['frozen-bread', 'Frozen Bread Planner'],
       ['suppliers', 'Your Supply Network'],
       ['corporate', 'Every Location. One Clear View.'],
       ['consolidation', 'Artimex Production Consolidation'],

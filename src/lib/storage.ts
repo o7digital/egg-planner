@@ -20,6 +20,10 @@ export function loadState(): PlannerState {
       stocks: { ...initialState.stocks, ...parsed.stocks },
       orders: parsed.orders ?? initialState.orders,
       history: parsed.history ?? [],
+      frozenInventories: { ...initialState.frozenInventories, ...parsed.frozenInventories },
+      thawBatches: parsed.thawBatches ?? initialState.thawBatches,
+      frozenManualQuantities: { ...initialState.frozenManualQuantities, ...parsed.frozenManualQuantities },
+      frozenOrders: parsed.frozenOrders ?? initialState.frozenOrders,
     };
   } catch {
     return initialState;

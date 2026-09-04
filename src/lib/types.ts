@@ -62,6 +62,22 @@ export interface DemoOrder {
   status: 'validated';
 }
 
+export type FrozenInventoryStatus = 'ok' | 'low' | 'shortage' | 'overstock';
+export type ThawBatchStatus = 'planned' | 'thawing' | 'ready' | 'completed';
+export type FrozenOrderStatus = 'not-required' | 'suggested' | 'draft' | 'validated' | 'included-in-consolidation';
+
+export interface FrozenProduct {
+  id: string; name: string; supplier: 'Artimex'; sku: string; unitsPerCase: number;
+  thawHours: number; consumptionRatio: number; safetyStockPercent: number; pricePerCase: number;
+}
+export interface FrozenInventory { locationId: string; productId: string; frozenQty: number; thawingQty: number; readyQty: number; incomingQty: number; incomingEta: string; }
+export interface ThawBatch { id: string; locationId: string; productId: string; quantity: number; thawStart: string; readyAt: string; status: ThawBatchStatus; }
+export interface DemandWindow { productId: string; requiredQty: number; requiredAt: string; }
+export interface FrozenBreadNeed { productId: string; expectedNeed: number; safetyStock: number; frozenUsable: number; thawingUsable: number; readyQty: number; incomingUsable: number; projectedAvailable: number; shortage: number; suggestedCases: number; status: FrozenInventoryStatus; }
+export interface FrozenReplenishment { locationId: string; date: string; quantities: Record<string, number>; status: FrozenOrderStatus; confirmedAt?: string; }
+export interface Restaurant365InventoryItem { locationId: string; sku: string; productName: string; onHand: number; lastCount: number; received: number; waste: number; transferIn: number; transferOut: number; lastUpdated: string; }
+export interface InventoryMapping { r365Sku: string; r365Name: string; frozenProductId: string; artimexProductName: string; }
+
 export interface PlannerState {
   locationId: string;
   date: string;
@@ -78,4 +94,8 @@ export interface PlannerState {
   history: DemoOrder[];
   consolidationFilter: 'validated';
   viewMode: ViewMode;
+  frozenInventories: Record<string, FrozenInventory>;
+  thawBatches: ThawBatch[];
+  frozenManualQuantities: Record<string, number>;
+  frozenOrders: FrozenReplenishment[];
 }

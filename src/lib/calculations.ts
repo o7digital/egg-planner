@@ -1,5 +1,5 @@
-import { demoWeatherPattern, locations, products } from './data';
-import type { DemoOrder, ForecastDay, PlannerState, Product, ProductNeed, RequirementHorizon, Weather } from './types';
+import { demoWeatherPattern, frozenProducts, locations, products } from './data';
+import type { DemoOrder, ForecastDay, FrozenBreadNeed, FrozenInventory, FrozenProduct, PlannerState, Product, ProductNeed, RequirementHorizon, Weather } from './types';
 
 const DAY_MS = 86_400_000;
 
@@ -7,6 +7,8 @@ export const planKey = (date: string, locationId: string) => `${date}:${location
 export const forecastKey = (date: string, locationId: string) => `${date}:${locationId}`;
 export const keyFor = (locationId: string, productId: string) => `${locationId}:${productId}`;
 export const manualKeyFor = (date: string, locationId: string, productId: string) => `${date}:${locationId}:${productId}`;
+export const frozenKeyFor = (locationId: string, productId: string) => `${locationId}:${productId}`;
+export const frozenManualKeyFor = (date: string, locationId: string, productId: string) => `frozen:${date}:${locationId}:${productId}`;
 
 export const locationMultiplier = (locationId: string) =>
   1 + Math.max(0, locations.findIndex((location) => location.id === locationId)) * 0.075;
@@ -145,3 +147,34 @@ export function calculateArtimexProduction(
   const productionRequired = Math.max(0, restaurantDemand + safetyMargin - Math.max(0, frozenInventory) - Math.max(0, alreadyPlannedProduction));
   return { restaurantDemand, safetyMargin, frozenInventory: Math.max(0, frozenInventory), alreadyPlannedProduction: Math.max(0, alreadyPlannedProduction), productionRequired };
 }
+
+export const frozenInventoryFor = (state: PlannerState, productId: string, locationId = state.locationId): FrozenInventory =>
+  state.frozenInventories[frozenKeyFor(locationId, productId)] ?? { locationId, productId, frozenQty: 0, thawingQty: 0, readyQty: 0, incomingQty: 0, incomingEta: '' };
+
+export function frozenDemandTime(date: string, product: FrozenProduct) {
+  const hour = product.id.includes('concha') || product.id.includes('cuernito') ? 10 : product.id.includes('pan-dulce') ? 11 : 12;
+  return `${date}T${String(hour).padStart(2, '0')}:00:00`;
+}
+
+export function frozenExpectedNeed(state: PlannerState, product: FrozenProduct, locationId = state.locationId) {
+  const validated = state.forecastStatuses[planKey(state.date, locationId)] === 'validated';
+  return validated ? Math.round(forecastSales(state, locationId) / 1000 * product.consumptionRatio) : 0;
+}
+
+export function calculateFrozenBreadNeed(state: PlannerState, product: FrozenProduct, locationId = state.locationId): FrozenBreadNeed {
+  const inventory = frozenInventoryFor(state, product.id, locationId);
+  const expectedNeed = frozenExpectedNeed(state, product, locationId);
+  const safetyStock = Math.round(expectedNeed * product.safetyStockPercent / 100);
+  const requiredAt = new Date(frozenDemandTime(state.date, product));
+  const thawingUsable = state.thawBatches.filter((batch) => batch.locationId === locationId && batch.productId === product.id && ['planned', 'thawing', 'ready'].includes(batch.status) && new Date(batch.readyAt) <= requiredAt).reduce((sum, batch) => sum + batch.quantity, 0);
+  const incomingUsable = inventory.incomingEta && new Date(inventory.incomingEta) <= requiredAt ? inventory.incomingQty : 0;
+  const frozenUsable = 0; // At the demo's current operating time, new frozen units cannot complete the 8-hour thaw before the early service window.
+  const projectedAvailable = inventory.readyQty + thawingUsable + frozenUsable + incomingUsable;
+  const shortage = Math.max(0, expectedNeed + safetyStock - projectedAvailable);
+  const ratio = projectedAvailable / Math.max(1, expectedNeed + safetyStock);
+  const status = shortage > 0 ? 'shortage' : ratio < 1.12 ? 'low' : ratio > 1.7 ? 'overstock' : 'ok';
+  return { productId: product.id, expectedNeed, safetyStock, frozenUsable, thawingUsable, readyQty: inventory.readyQty, incomingUsable, projectedAvailable, shortage, suggestedCases: calculateCasesRequired(shortage, product.unitsPerCase), status };
+}
+
+export const frozenNeedRows = (state: PlannerState, locationId = state.locationId) => frozenProducts.map((product) => calculateFrozenBreadNeed(state, product, locationId));
+export const frozenPlannedCases = (state: PlannerState, product: FrozenProduct, locationId = state.locationId) => state.frozenManualQuantities[frozenManualKeyFor(state.date, locationId, product.id)] ?? calculateFrozenBreadNeed(state, product, locationId).suggestedCases;

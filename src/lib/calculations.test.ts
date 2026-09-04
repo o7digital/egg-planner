@@ -1,13 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { initialState, products } from './data';
+import { frozenProducts, initialState, products } from './data';
 import {
   artimexConsolidation, calculateArtimexProduction, calculateCasesRequired,
-  calculateForecastSales, calculateProductNeed, forecastKey, manualKeyFor,
+  calculateForecastSales, calculateFrozenBreadNeed, calculateProductNeed, forecastKey, manualKeyFor,
   planKey, plannedQuantity, replaceOrder, requirementHorizon, weeklyForecast,
 } from './calculations';
 import type { DemoOrder, PlannerState } from './types';
 
 describe('transparent planning calculations', () => {
+  it('excludes frozen inventory when it cannot complete the eight-hour thaw before demand', () => {
+    const state = { ...initialState, forecastStatuses: { ...initialState.forecastStatuses, [planKey(initialState.date, 'canoga-park')]: 'validated' as const } };
+    const result = calculateFrozenBreadNeed(state, frozenProducts[0]);
+    expect(result.frozenUsable).toBe(0);
+    expect(result.projectedAvailable).toBe(result.readyQty + result.thawingUsable + result.incomingUsable);
+  });
   it('applies each explicit weather rule without negative sales', () => {
     expect(calculateForecastSales(18_000, -30)).toBe(12_600);
     expect(calculateForecastSales(18_000, -15)).toBe(15_300);
